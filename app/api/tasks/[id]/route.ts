@@ -20,12 +20,22 @@ export async function PATCH(request: Request, { params }: Context) {
 
   try {
     const body = await request.json()
-    const completed = Boolean(body.completed)
+
+    const patch: Record<string, unknown> = {}
+
+    if (typeof body.title === 'string') patch.title = body.title.trim()
+    if (typeof body.completed === 'boolean') patch.completed = body.completed
+    if (typeof body.priority === 'string') patch.priority = body.priority
+    if ('due_at' in body) patch.due_at = body.due_at || null
+    if (Array.isArray(body.tags)) {
+      patch.tags = body.tags.map((t: unknown) => String(t).trim()).filter(Boolean)
+    }
+    if (typeof body.sort_order === 'number') patch.sort_order = body.sort_order
 
     const { data, error } = await supabase
       .from('tasks')
-      .update({ completed })
-      .eq('id', Number(id))
+      .update(patch)
+      .eq('id', id)
       .select()
       .single()
 
@@ -55,7 +65,7 @@ export async function DELETE(_: Request, { params }: Context) {
   const { error } = await supabase
     .from('tasks')
     .delete()
-    .eq('id', Number(id))
+    .eq('id', id)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
