@@ -1,161 +1,37 @@
-import { Button } from "@/components/ui/button";
-import { Check } from "lucide-react";
-import { cn } from "@/lib/utils";
-
-const plans = [
-  {
-    name: "Starter",
-    price: "$49",
-    period: "/month",
-    description: "Perfect for self-paced learners who want to explore AI.",
-    features: [
-      "Access to 3 learning paths",
-      "Basic project templates",
-      "Community forum access",
-      "Monthly group Q&A sessions",
-      "Email support",
-    ],
-    popular: false,
-  },
-  {
-    name: "Professional",
-    price: "$149",
-    period: "/month",
-    description: "For serious career changers committed to their AI journey.",
-    features: [
-      "Access to all learning paths",
-      "Advanced project templates",
-      "1-on-1 mentor sessions (2/month)",
-      "Career coaching & resume review",
-      "Interview preparation",
-      "Priority support",
-      "Certificate of completion",
-    ],
-    popular: true,
-  },
-  {
-    name: "Enterprise",
-    price: "$399",
-    period: "/month",
-    description: "For teams and organizations upskilling their workforce.",
-    features: [
-      "Everything in Professional",
-      "Custom learning paths",
-      "Dedicated account manager",
-      "Team analytics dashboard",
-      "White-label certificates",
-      "API access",
-      "SLA guarantee",
-    ],
-    popular: false,
-  },
-];
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 export function Pricing() {
   return (
-    <section id="pricing" className="py-20 lg:py-32">
-      <div className="mx-auto max-w-7xl px-6 lg:px-8">
-        <div className="text-center max-w-2xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight text-foreground text-balance">
-            Invest in your AI future
-          </h2>
-          <p className="mt-4 text-lg text-muted-foreground">
-            Choose the plan that fits your learning style and career goals.
-          </p>
-        </div>
+    <section id="pricing" className="px-6 py-20 lg:px-8">
+      <div className="mx-auto max-w-4xl text-center">
+        <h2 className="text-3xl font-semibold tracking-tight">
+          Simple pricing
+        </h2>
 
-        <div className="grid md:grid-cols-3 gap-8 lg:gap-6">
-          {plans.map((plan) => (
-            <div
-              key={plan.name}
-              className={cn(
-                "relative p-8 rounded-2xl border transition-all duration-300",
-                plan.popular
-                  ? "bg-primary text-primary-foreground border-primary shadow-xl scale-105"
-                  : "bg-card border-border hover:border-accent/30"
-              )}
-            >
-              {plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-accent text-accent-foreground text-sm font-medium">
-                  Most Popular
-                </div>
-              )}
+        <p className="mt-4 text-muted-foreground">
+          Access the full AI transition platform
+        </p>
 
-              <div className="mb-6">
-                <h3
-                  className={cn(
-                    "text-xl font-semibold mb-2",
-                    plan.popular ? "text-primary-foreground" : "text-foreground"
-                  )}
-                >
-                  {plan.name}
-                </h3>
-                <p
-                  className={cn(
-                    "text-sm",
-                    plan.popular
-                      ? "text-primary-foreground/80"
-                      : "text-muted-foreground"
-                  )}
-                >
-                  {plan.description}
-                </p>
-              </div>
+        <Card className="mt-12">
+          <CardHeader>
+            <CardTitle className="text-2xl">SOLUTER AI</CardTitle>
+          </CardHeader>
 
-              <div className="mb-6">
-                <span
-                  className={cn(
-                    "text-4xl font-bold",
-                    plan.popular ? "text-primary-foreground" : "text-foreground"
-                  )}
-                >
-                  {plan.price}
-                </span>
-                <span
-                  className={cn(
-                    "text-sm",
-                    plan.popular
-                      ? "text-primary-foreground/80"
-                      : "text-muted-foreground"
-                  )}
-                >
-                  {plan.period}
-                </span>
-              </div>
+          <CardContent className="space-y-6">
+            <div className="text-4xl font-semibold">$29 / month</div>
 
-              <ul className="space-y-3 mb-8">
-                {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-3">
-                    <Check
-                      className={cn(
-                        "h-5 w-5 shrink-0 mt-0.5",
-                        plan.popular ? "text-accent" : "text-accent"
-                      )}
-                    />
-                    <span
-                      className={cn(
-                        "text-sm",
-                        plan.popular
-                          ? "text-primary-foreground/90"
-                          : "text-muted-foreground"
-                      )}
-                    >
-                      {feature}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>AI learning roadmaps</li>
+              <li>Learning dashboard</li>
+              <li>Project portfolio builder</li>
+              <li>Career transition milestones</li>
+            </ul>
 
-              <Button
-                className="w-full"
-                variant={plan.popular ? "secondary" : "default"}
-              >
-                Get started
-              </Button>
-            </div>
-          ))}
-        </div>
+            <Button size="lg">Start learning</Button>
+          </CardContent>
+        </Card>
       </div>
     </section>
-  );
+  )
 }

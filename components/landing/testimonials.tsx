@@ -1,80 +1,48 @@
-import { Star } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card"
 
 const testimonials = [
   {
-    quote:
-      "I went from being a marketing manager to an ML Engineer at a top tech company in just 8 months. The structured approach made all the difference.",
-    author: "Sarah Chen",
-    role: "ML Engineer at Google",
-    previousRole: "Former Marketing Manager",
+    name: "Alex M.",
+    role: "Data Analyst → ML Engineer",
+    text: "SOLUTER AI gave me a clear path into machine learning. I stopped jumping between tutorials and started building real projects.",
   },
   {
-    quote:
-      "The project-based curriculum gave me real experience I could talk about in interviews. I landed a role with a 40% salary increase.",
-    author: "Marcus Johnson",
-    role: "AI Product Manager at Microsoft",
-    previousRole: "Former Software Developer",
+    name: "Maria S.",
+    role: "Marketing → AI Specialist",
+    text: "The structured roadmap helped me transition into AI much faster than self-study.",
   },
   {
-    quote:
-      "As someone with no tech background, I was intimidated at first. But the beginner-friendly approach and supportive community helped me succeed.",
-    author: "Emily Rodriguez",
-    role: "Data Scientist at Meta",
-    previousRole: "Former Financial Analyst",
+    name: "Daniel K.",
+    role: "Software Engineer",
+    text: "The dashboard and milestone system made learning AI feel like a real progression system.",
   },
-];
+]
 
 export function Testimonials() {
   return (
-    <section id="testimonials" className="py-20 lg:py-32 bg-secondary/30">
-      <div className="mx-auto max-w-7xl px-6 lg:px-8">
-        <div className="text-center max-w-2xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight text-foreground text-balance">
-            Trusted by career changers worldwide
-          </h2>
-          <p className="mt-4 text-lg text-muted-foreground">
-            Join thousands who have successfully transitioned into AI careers.
-          </p>
-        </div>
+    <section id="testimonials" className="px-6 py-20 lg:px-8">
+      <div className="mx-auto max-w-6xl">
+        <h2 className="text-center text-3xl font-semibold tracking-tight">
+          What learners say
+        </h2>
 
-        <div className="grid md:grid-cols-3 gap-8">
-          {testimonials.map((testimonial) => (
-            <div
-              key={testimonial.author}
-              className="p-8 rounded-2xl bg-card border border-border"
-            >
-              <div className="flex gap-1 mb-6">
-                {[...Array(5)].map((_, i) => (
-                  <Star
-                    key={i}
-                    className="h-4 w-4 fill-accent text-accent"
-                  />
-                ))}
-              </div>
-              <blockquote className="text-foreground leading-relaxed mb-6">
-                &ldquo;{testimonial.quote}&rdquo;
-              </blockquote>
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-sm font-semibold text-muted-foreground">
-                  {testimonial.author
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </div>
+        <div className="mt-12 grid gap-6 md:grid-cols-3">
+          {testimonials.map((t) => (
+            <Card key={t.name}>
+              <CardContent className="space-y-4 p-6">
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  "{t.text}"
+                </p>
+
                 <div>
-                  <div className="font-semibold text-foreground">
-                    {testimonial.author}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {testimonial.role}
-                  </div>
-                  <div className="text-xs text-accent">{testimonial.previousRole}</div>
+                  <div className="font-medium">{t.name}</div>
+                  <div className="text-xs text-muted-foreground">{t.role}</div>
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       </div>
     </section>
-  );
+  )
 }
