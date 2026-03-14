@@ -16,14 +16,14 @@ export default function AuthBar({ email }: { email: string }) {
   }
 
   return (
-    <div className="mb-6 flex items-center justify-between rounded-xl border bg-card p-4">
+    <div className="mb-6 flex items-center justify-between rounded-2xl border bg-card p-4 shadow-sm">
       <div className="flex flex-col gap-1">
         <span className="text-sm text-muted-foreground">Signed in as</span>
         <span className="text-sm font-medium">{email}</span>
       </div>
 
       <div className="flex items-center gap-3">
-        <Badge variant="secondary">Active</Badge>
+        <Badge variant="secondary">Student</Badge>
         <Button variant="outline" onClick={signOut}>
           Sign out
         </Button>

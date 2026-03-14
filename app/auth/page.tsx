@@ -38,7 +38,7 @@ export default function AuthPage() {
         toast.success('Signed in')
       }
 
-      router.push('/')
+      router.push('/dashboard')
       router.refresh()
     } catch (err: any) {
       toast.error(err.message ?? 'Authentication error')
@@ -55,9 +55,7 @@ export default function AuthPage() {
             {mode === 'login' ? 'Sign in' : 'Create account'}
           </CardTitle>
           <CardDescription>
-            {mode === 'login'
-              ? 'Enter your email and password to continue.'
-              : 'Create a new account to start using the app.'}
+            Learn AI skills and transition into modern AI careers.
           </CardDescription>
         </CardHeader>
 

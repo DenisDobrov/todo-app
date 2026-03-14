@@ -1,10 +1,10 @@
 import type { Metadata } from "next"
-import { Toaster } from "@/components/ui/sonner"
 import "./globals.css"
+import { Toaster } from "@/components/ui/sonner"
 
 export const metadata: Metadata = {
-  title: "Todo App",
-  description: "Todo mini SaaS",
+  title: "SOLUTER AI",
+  description: "Education platform for people transitioning into AI careers",
 }
 
 export default function RootLayout({
@@ -12,7 +12,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>
+      <body className="bg-background text-foreground antialiased">
         {children}
         <Toaster />
       </body>
