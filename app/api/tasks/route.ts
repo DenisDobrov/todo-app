@@ -1,7 +1,18 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET() {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const { data, error } = await supabase
     .from('tasks')
     .select('*')
@@ -15,6 +26,17 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
     const body = await request.json()
     const title = String(body.title ?? '').trim()
@@ -25,7 +47,7 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabase
       .from('tasks')
-      .insert([{ title, completed: false }])
+      .insert([{ title, completed: false, user_id: user.id }])
       .select()
       .single()
 

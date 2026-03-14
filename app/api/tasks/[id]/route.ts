@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
 
 type Context = {
   params: Promise<{ id: string }>
@@ -7,6 +7,16 @@ type Context = {
 
 export async function PATCH(request: Request, { params }: Context) {
   const { id } = await params
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   try {
     const body = await request.json()
@@ -31,6 +41,16 @@ export async function PATCH(request: Request, { params }: Context) {
 
 export async function DELETE(_: Request, { params }: Context) {
   const { id } = await params
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const { error } = await supabase
     .from('tasks')
