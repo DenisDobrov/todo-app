@@ -10,7 +10,21 @@ import { FAQ } from "@/components/landing/faq"
 import { FinalCTA } from "@/components/landing/final-cta"
 import { Footer } from "@/components/landing/footer"
 
-export default function Home() {
+// GEMINI VOICE
+import { createClient } from '@/lib/supabase/server'
+
+import { TodoDashboard } from "@/components/dashboard/todo-dashboard"
+
+export default async function Home() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Если пользователь залогинен, показываем приложение
+  if (user) {
+    return <TodoDashboard user={user} />
+  }
+
+  // Если нет — показываем лендинг
   return (
     <main className="min-h-screen">
       <Navigation />
