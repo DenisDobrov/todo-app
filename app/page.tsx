@@ -12,7 +12,6 @@ import { Footer } from "@/components/landing/footer"
 
 // GEMINI VOICE
 import { createClient } from '@/lib/supabase/server'
-
 import { TodoDashboard } from "@/components/dashboard/todo-dashboard"
 
 export default async function Home() {
@@ -21,7 +20,17 @@ export default async function Home() {
 
   // Если пользователь залогинен, показываем приложение
   if (user) {
-    return <TodoDashboard user={user} />
+    // Безопасно извлекаем имя и email для пропсов
+    const userName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'
+    const email = user.email || ''
+
+    return (
+      <TodoDashboard 
+        user={user} 
+        userName={userName} 
+        email={email} 
+      />
+    )
   }
 
   // Если нет — показываем лендинг

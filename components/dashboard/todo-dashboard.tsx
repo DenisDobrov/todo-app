@@ -60,8 +60,8 @@ export function TodoDashboard({ user, userName, email }: TodoDashboardProps) {
   return (
     <div className="min-h-screen bg-slate-50/50 pb-20">
       <div className="max-w-4xl mx-auto py-10 px-4">
-        {/* Панель пользователя */}
-        <AuthBar email={userName} />
+        {/* Панель пользователя: передаем userName */}
+        <AuthBar userName={userName} />
 
         <header className="flex justify-between items-center mb-8 mt-10">
           <div>
