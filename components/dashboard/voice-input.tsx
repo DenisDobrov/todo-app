@@ -48,43 +48,56 @@ export function VoiceInput() {
     }
   }
 
-  const handleVoiceProcess = async (blob: Blob) => {
+const handleVoiceProcess = async (blob: Blob) => {
     setIsProcessing(true)
     
-    // Хак для iOS: разблокируем аудио-движок
-    const silentAudio = new Audio();
-    silentAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
-    silentAudio.play().catch(() => {});
+    // --- ГЛУБОКИЙ ХАК ДЛЯ iOS ---
+    // 1. Создаем аудио-контекст принудительно
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    const audioCtx = new AudioContext();
+    
+    // 2. Создаем и запускаем пустой буфер (тишина)
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioCtx.createBuffer(1, 1, 22050);
+    source.connect(audioCtx.destination);
+    source.start(0);
+
+    // 3. Если контекст "спит", будим его (важно для iOS 17+)
+    if (audioCtx.state === 'suspended') {
+      await audioCtx.resume();
+    }
+    // ----------------------------
 
     const formData = new FormData()
     formData.append('audio', blob, 'recording.webm')
 
     try {
-      // 1. Отправляем на сервер
-      const result = await processVoiceTask(formData)
+      const result = await processVoiceTask(formData) as any
 
-      // 2. Озвучка ответа (срабатывает и при успехе, и при "мусоре")
       if (result.response_phrase) {
         try {
           const audioBase64 = await generateSpeech(result.response_phrase)
           if (audioBase64) {
             const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`)
-            // Для iOS используем принудительный запуск
-            audio.oncanplaythrough = () => audio.play()
-            await audio.play()
+            
+            // На iOS лучше играть через созданный контекст или явно через метод play
+            audio.play().catch(err => {
+              console.error("Всё еще блокируется iOS:", err);
+              // Запасной вариант: попробовать нажать кнопку "воспроизвести" скрыто
+              toast.error("Нажмите еще раз, чтобы услышать ответ");
+            });
           }
         } catch (speechErr) {
           console.error("Ошибка TTS:", speechErr)
         }
       }
 
-      // 3. Визуальное уведомление
       if (result.success) {
         toast.success('Задача добавлена!')
-        router.refresh() // 3. ВОТ ЭТО заставит Next.js обновить Server Components на странице
-
-      } else if (result.error === "Task not detected") {
-        toast.info('Голос распознан, но задача не найдена')
+        // Рефреш страницы через 2 секунды (чтобы звук успел проиграться)
+        setTimeout(() => {
+          window.location.reload()
+        }, 2000)
       } else {
         toast.error(result.error || 'Ошибка обработки')
       }
