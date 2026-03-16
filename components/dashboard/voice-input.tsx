@@ -46,51 +46,43 @@ export function VoiceInput() {
 
   const handleVoiceProcess = async (blob: Blob) => {
     setIsProcessing(true)
-
-    // ХИТРОСТЬ ДЛЯ iOS: Создаем пустой аудио-объект сразу после клика
-    // Это "разблокирует" аудио-контекст для этой сессии
+    
+    // Хак для iOS: разблокируем аудио-движок
     const silentAudio = new Audio();
     silentAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
-    silentAudio.play().catch(() => {}); // Игнорируем ошибки
-    
-const formData = new FormData()
+    silentAudio.play().catch(() => {});
+
+    const formData = new FormData()
     formData.append('audio', blob, 'recording.webm')
 
     try {
+      // 1. Отправляем на сервер
       const result = await processVoiceTask(formData)
 
-      if (result.success && result.task) {
-        toast.success('Задача добавлена!')
-        
-        const date = result.task.due_at 
-          ? new Date(result.task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          : null
-        
-        const speechText = date 
-          ? `Окей, добавил задачу: ${result.task.title} на ${date}`
-          : `Окей, добавил задачу: ${result.task.title}`
-
+      // 2. Озвучка ответа (срабатывает и при успехе, и при "мусоре")
+      if (result.response_phrase) {
         try {
-          const audioBase64 = await generateSpeech(speechText)
+          const audioBase64 = await generateSpeech(result.response_phrase)
           if (audioBase64) {
-            // Используем уже созданный ранее объект или создаем новый,
-            // но теперь iOS "доверяет" нам
             const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`)
-            
-            // На iOS иногда нужно явно вызвать play по завершении загрузки метаданных
-            audio.oncanplaythrough = () => {
-              audio.play().catch(e => console.error("iOS Play Error:", e));
-            };
-            
-            // Запасной вариант для десктопа
-            await audio.play();
+            // Для iOS используем принудительный запуск
+            audio.oncanplaythrough = () => audio.play()
+            await audio.play()
           }
         } catch (speechErr) {
-          console.error("Ошибка TTS:", speechErr);
+          console.error("Ошибка TTS:", speechErr)
         }
-      } else {
-        toast.error(result.error || 'Не удалось распознать задачу')
       }
+
+      // 3. Визуальное уведомление
+      if (result.success) {
+        toast.success('Задача добавлена!')
+      } else if (result.error === "Task not detected") {
+        toast.info('Голос распознан, но задача не найдена')
+      } else {
+        toast.error(result.error || 'Ошибка обработки')
+      }
+
     } catch (error) {
       console.error('Критическая ошибка:', error)
       toast.error('Ошибка соединения')

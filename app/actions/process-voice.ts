@@ -6,13 +6,8 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
-// Увеличиваем время выполнения для Vercel (Hobby план позволяет до 30с)
-// export const maxDuration = 30;
-
 async function syncWithGoogle(task: any, token: string) {
   try {
-    // На сервере Intl.DateTimeFormat может вернуть UTC, 
-    // поэтому для календаря лучше использовать ISO строку напрямую
     const startTime = new Date(task.due_at);
     const endTime = new Date(startTime.getTime() + 30 * 60000);
 
@@ -51,23 +46,21 @@ async function syncWithGoogle(task: any, token: string) {
 
 export async function processVoiceTask(formData: FormData) {
   const file = formData.get('audio') as File
-  if (!file) return { success: false, error: "Нет аудиофайла" }
+  if (!file) return { success: false, error: "Нет аудиофайла", response_phrase: "Ошибка: аудиофайл не получен" }
 
   const supabase = await createClient()
 
-  // 1. БЕЗОПАСНАЯ ПРОВЕРКА: используем getUser() вместо getSession()
+  // БЕЗОПАСНАЯ ПРОВЕРКА
   const { data: { user }, error: authError } = await supabase.auth.getUser()
-  
-  // Для Google Calendar API нам всё равно нужен токен из сессии
   const { data: { session } } = await supabase.auth.getSession()
 
   if (authError || !user || !session) {
     console.error("Auth error:", authError)
-    return { success: false, error: "Требуется авторизация" }
+    return { success: false, error: "Требуется авторизация", response_phrase: "Пожалуйста, войдите в систему" }
   }
 
   try {
-    // 2. Whisper: Голос в текст
+    // 1. Whisper: Голос в текст
     const whisperFormData = new FormData()
     whisperFormData.append('file', file)
     whisperFormData.append('model', 'whisper-1')
@@ -81,41 +74,62 @@ export async function processVoiceTask(formData: FormData) {
     if (!whisperRes.ok) throw new Error("Ошибка Whisper API")
     const { text: transcript } = await whisperRes.json()
 
-    // 3. GPT-4o-mini: Текст в структурированные данные
+    // 2. GPT-4o-mini: Фильтрация мусора и структурирование
     const { object: taskData } = await generateObject({
       model: openai('gpt-4o-mini'),
       schema: z.object({
-        title: z.string(),
+        is_task: z.boolean(),
+        title: z.string().nullable(),
         priority: z.enum(['low', 'medium', 'high']),
         due_at: z.string().nullable(),
         tags: z.array(z.string()),
         is_calendar_synced: z.boolean(),
+        response_phrase: z.string(),
       }),
       prompt: `Текущее время (ISO): ${new Date().toISOString()}. 
-               Разбери задачу из текста: "${transcript}". 
-               Если пользователь указал конкретную дату или время, установи is_calendar_synced: true. 
-               Если время не указано, due_at: null и is_calendar_synced: false.`,
+               Текст пользователя: "${transcript}". 
+
+               Твоя задача:
+               1. Определи, содержит ли текст реальное намерение создать задачу. 
+                  Если это просто шум, фоновые звуки, случайные слова ("проверка", "привет" без задачи) — установи is_task: false.
+               2. Если это задача:
+                  - Очисти заголовок от лишних слов ("запиши", "эээ").
+                  - Исправь опечатки.
+                  - Если указано конкретное время/дата, вычисли ISO и поставь is_calendar_synced: true.
+               3. Сформируй response_phrase для озвучки:
+                  - При успехе: "Окей, добавил: [заголовок]".
+                  - При успехе со временем: "Записал на [время]: [заголовок]".
+                  - Если это мусор/не задача: "Извини, я не расслышал задачу".`,
     })
 
-    // 4. Сохранение в Supabase
+    // Если AI решил, что это мусор
+    if (!taskData.is_task) {
+      return { 
+        success: false, 
+        error: "Task not detected", 
+        response_phrase: taskData.response_phrase 
+      }
+    }
+
+    // 3. Сохранение в Supabase
     const { data: task, error: dbError } = await supabase
       .from('tasks')
       .insert([{ 
-        ...taskData, 
-        user_id: user.id, // Используем проверенный ID из getUser()
+        title: taskData.title,
+        priority: taskData.priority,
+        due_at: taskData.due_at,
+        tags: taskData.tags,
+        user_id: user.id,
         completed: false 
       }])
       .select().single()
 
     if (dbError) throw dbError
 
-    // 5. Синхронизация с Google Calendar
-    // Используем provider_token из сессии
-    let syncSuccess = false;
+    // 4. Синхронизация с Google Calendar
     if (taskData.is_calendar_synced && taskData.due_at && session.provider_token) {
-      syncSuccess = await syncWithGoogle(task, session.provider_token)
-      
-      if (syncSuccess) {
+      const isSynced = await syncWithGoogle(task, session.provider_token)
+      if (isSynced) {
         await supabase
           .from('tasks')
           .update({ is_calendar_synced: true })
@@ -124,10 +138,21 @@ export async function processVoiceTask(formData: FormData) {
     }
 
     revalidatePath('/')
-    return { success: true, task, transcript }
+    
+    // Возвращаем результат с response_phrase
+    return { 
+      success: true, 
+      task, 
+      transcript, 
+      response_phrase: taskData.response_phrase 
+    }
 
   } catch (err) {
     console.error('Ошибка процесса:', err)
-    return { success: false, error: err instanceof Error ? err.message : "Неизвестная ошибка" }
+    return { 
+      success: false, 
+      error: "Ошибка сервера", 
+      response_phrase: "Произошла ошибка при обработке голоса" 
+    }
   }
 }
