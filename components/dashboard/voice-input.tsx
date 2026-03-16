@@ -50,60 +50,40 @@ export function VoiceInput() {
     formData.append('audio', blob, 'recording.webm')
 
     try {
+      // 1. Обработка задачи
       const result = await processVoiceTask(formData)
 
       if (result.success && result.task) {
         toast.success('Задача добавлена!')
         
-// Внутри handleVoiceProcess в файле components/dashboard/voice-input.tsx
+        // 2. Формируем текст для озвучки
+        const date = result.task.due_at 
+          ? new Date(result.task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          : null
+        
+        const speechText = date 
+          ? `Окей, добавил задачу: ${result.task.title} на ${date}`
+          : `Окей, добавил задачу: ${result.task.title}`
 
-const handleVoiceProcess = async (blob: Blob) => {
-  setIsProcessing(true)
-  const formData = new FormData()
-  formData.append('audio', blob, 'recording.webm')
-
-  try {
-    // ШАГ 1: Создаем задачу (Whisper + GPT + DB + Calendar)
-    const result = await processVoiceTask(formData)
-
-    if (result.success && result.task) {
-      toast.success('Задача добавлена!')
-      
-      // Формируем текст
-      const date = result.task.due_at 
-        ? new Date(result.task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : null
-      const speechText = date 
-        ? `Окей, добавил задачу: ${result.task.title} на ${date}`
-        : `Окей, добавил задачу: ${result.task.title}`
-
-      // ШАГ 2: Генерируем голос ОТДЕЛЬНЫМ запросом
-      // Это не дает Server Action упасть по тайм-ауту всей цепочки
-      const audioBase64 = await generateSpeech(speechText)
-      
-      if (audioBase64) {
-        const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`)
-        await audio.play()
+        // 3. Генерация и воспроизведение голоса
+        try {
+          const audioBase64 = await generateSpeech(speechText)
+          if (audioBase64) {
+            const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`)
+            // Важно: play() возвращает promise, подождем его
+            await audio.play()
+          } else {
+            console.warn("Голос не пришел от API")
+          }
+        } catch (speechErr) {
+          console.error("Ошибка TTS:", speechErr)
+        }
       } else {
-        console.warn("Голос не был сгенерирован (пустой ответ)")
-      }
-    } else {
-      toast.error(result.error || 'Ошибка обработки')
-    }
-  } catch (error) {
-    console.error('Критическая ошибка клиента:', error)
-    toast.error('Произошла ошибка')
-  } finally {
-    setIsProcessing(false)
-  }
-}
-      } else {
-        // 2. Выводим конкретную ошибку из экшена (например, про авторизацию)
-        toast.error(result.error || 'Не удалось обработать голос')
+        toast.error(result.error || 'Не удалось распознать задачу')
       }
     } catch (error) {
       console.error('Критическая ошибка:', error)
-      toast.error('Ошибка соединения с сервером')
+      toast.error('Ошибка соединения')
     } finally {
       setIsProcessing(false)
     }
