@@ -46,17 +46,22 @@ export function VoiceInput() {
 
   const handleVoiceProcess = async (blob: Blob) => {
     setIsProcessing(true)
-    const formData = new FormData()
+
+    // ХИТРОСТЬ ДЛЯ iOS: Создаем пустой аудио-объект сразу после клика
+    // Это "разблокирует" аудио-контекст для этой сессии
+    const silentAudio = new Audio();
+    silentAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
+    silentAudio.play().catch(() => {}); // Игнорируем ошибки
+    
+const formData = new FormData()
     formData.append('audio', blob, 'recording.webm')
 
     try {
-      // 1. Обработка задачи
       const result = await processVoiceTask(formData)
 
       if (result.success && result.task) {
         toast.success('Задача добавлена!')
         
-        // 2. Формируем текст для озвучки
         const date = result.task.due_at 
           ? new Date(result.task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           : null
@@ -65,18 +70,23 @@ export function VoiceInput() {
           ? `Окей, добавил задачу: ${result.task.title} на ${date}`
           : `Окей, добавил задачу: ${result.task.title}`
 
-        // 3. Генерация и воспроизведение голоса
         try {
           const audioBase64 = await generateSpeech(speechText)
           if (audioBase64) {
+            // Используем уже созданный ранее объект или создаем новый,
+            // но теперь iOS "доверяет" нам
             const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`)
-            // Важно: play() возвращает promise, подождем его
-            await audio.play()
-          } else {
-            console.warn("Голос не пришел от API")
+            
+            // На iOS иногда нужно явно вызвать play по завершении загрузки метаданных
+            audio.oncanplaythrough = () => {
+              audio.play().catch(e => console.error("iOS Play Error:", e));
+            };
+            
+            // Запасной вариант для десктопа
+            await audio.play();
           }
         } catch (speechErr) {
-          console.error("Ошибка TTS:", speechErr)
+          console.error("Ошибка TTS:", speechErr);
         }
       } else {
         toast.error(result.error || 'Не удалось распознать задачу')
