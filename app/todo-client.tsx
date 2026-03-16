@@ -362,6 +362,9 @@ export default function TodoClient({ email }: { email: string }) {
 
   const sensors = useSensors(useSensor(PointerSensor))
 
+  // МИН-ФИКС: Создаем userName для AuthBar, чтобы избежать ошибки типов
+  const displayUserName = email.split('@')[0] || 'User'
+
   async function loadTasks(nextFilter: Filter = filter) {
     setRefreshing(true)
 
@@ -547,7 +550,8 @@ export default function TodoClient({ email }: { email: string }) {
   return (
     <main className="min-h-screen bg-muted/30 p-6">
       <div className="mx-auto max-w-4xl">
-        <AuthBar email={email} />
+        {/* МИН-ФИКС: Передаем userName вместо email */}
+        <AuthBar userName={displayUserName} />
 
         <div className="mb-6 grid gap-4 md:grid-cols-3">
           <Card className="shadow-sm">
