@@ -40,7 +40,6 @@ export function VoiceInput() {
     if (mediaRecorder.current && isRecording) {
       mediaRecorder.current.stop()
       setIsRecording(false)
-      // Останавливаем все дорожки микрофона
       mediaRecorder.current.stream.getTracks().forEach(track => track.stop())
     }
   }
@@ -56,25 +55,32 @@ export function VoiceInput() {
       if (result.success && result.task) {
         toast.success('Задача добавлена!')
         
-        // Формируем текст для озвучки
-        const date = result.task.due_at 
-          ? new Date(result.task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          : null
-        
-        const speechText = date 
-          ? `Окей, добавил задачу: ${result.task.title} на ${date}`
-          : `Окей, добавил задачу: ${result.task.title}`
+        // 1. Озвучка в отдельном try-catch, чтобы не мешать основному циклу
+        try {
+          const date = result.task.due_at 
+            ? new Date(result.task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : null
+          
+          const speechText = date 
+            ? `Окей, добавил задачу: ${result.task.title} на ${date}`
+            : `Окей, добавил задачу: ${result.task.title}`
 
-        // Генерируем и воспроизводим голос
-        const audioBase64 = await generateSpeech(speechText)
-        const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`)
-        await audio.play()
+          const audioBase64 = await generateSpeech(speechText)
+          if (audioBase64) {
+            const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`)
+            await audio.play()
+          }
+        } catch (speechErr) {
+          console.error('Ошибка воспроизведения голоса:', speechErr)
+          // Не показываем ошибку пользователю, так как задача уже создана
+        }
       } else {
-        toast.error('Не удалось обработать голос')
+        // 2. Выводим конкретную ошибку из экшена (например, про авторизацию)
+        toast.error(result.error || 'Не удалось обработать голос')
       }
     } catch (error) {
-      console.error(error)
-      toast.error('Ошибка при обработке')
+      console.error('Критическая ошибка:', error)
+      toast.error('Ошибка соединения с сервером')
     } finally {
       setIsProcessing(false)
     }

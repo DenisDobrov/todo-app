@@ -6,19 +6,24 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
+// Увеличиваем время выполнения для Vercel (Hobby план позволяет до 30с)
+// export const maxDuration = 30;
+
 async function syncWithGoogle(task: any, token: string) {
   try {
+    // На сервере Intl.DateTimeFormat может вернуть UTC, 
+    // поэтому для календаря лучше использовать ISO строку напрямую
+    const startTime = new Date(task.due_at);
+    const endTime = new Date(startTime.getTime() + 30 * 60000);
+
     const event = {
       summary: task.title,
       description: `Создано через AI. Приоритет: ${task.priority}`,
       start: { 
-        dateTime: task.due_at, 
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone 
+        dateTime: startTime.toISOString(),
       },
       end: { 
-        // Событие на 30 минут по умолчанию
-        dateTime: new Date(new Date(task.due_at).getTime() + 30 * 60000).toISOString(), 
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone 
+        dateTime: endTime.toISOString(),
       },
       reminders: { useDefault: true },
     }
@@ -31,6 +36,12 @@ async function syncWithGoogle(task: any, token: string) {
       },
       body: JSON.stringify(event),
     })
+
+    if (!res.ok) {
+      const errorData = await res.json();
+      console.error('Google Calendar API Error:', errorData);
+    }
+
     return res.ok
   } catch (e) {
     console.error('Ошибка синхронизации календаря:', e)
@@ -40,14 +51,23 @@ async function syncWithGoogle(task: any, token: string) {
 
 export async function processVoiceTask(formData: FormData) {
   const file = formData.get('audio') as File
+  if (!file) return { success: false, error: "Нет аудиофайла" }
+
   const supabase = await createClient()
 
-  // Получаем сессию, где лежит provider_token от Google
+  // 1. БЕЗОПАСНАЯ ПРОВЕРКА: используем getUser() вместо getSession()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  
+  // Для Google Calendar API нам всё равно нужен токен из сессии
   const { data: { session } } = await supabase.auth.getSession()
-  if (!session) throw new Error("Требуется авторизация")
+
+  if (authError || !user || !session) {
+    console.error("Auth error:", authError)
+    return { success: false, error: "Требуется авторизация" }
+  }
 
   try {
-    // 1. Whisper: Голос в текст
+    // 2. Whisper: Голос в текст
     const whisperFormData = new FormData()
     whisperFormData.append('file', file)
     whisperFormData.append('model', 'whisper-1')
@@ -57,9 +77,11 @@ export async function processVoiceTask(formData: FormData) {
       headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
       body: whisperFormData
     })
+
+    if (!whisperRes.ok) throw new Error("Ошибка Whisper API")
     const { text: transcript } = await whisperRes.json()
 
-    // 2. GPT-4o-mini: Текст в структурированные данные
+    // 3. GPT-4o-mini: Текст в структурированные данные
     const { object: taskData } = await generateObject({
       model: openai('gpt-4o-mini'),
       schema: z.object({
@@ -69,28 +91,31 @@ export async function processVoiceTask(formData: FormData) {
         tags: z.array(z.string()),
         is_calendar_synced: z.boolean(),
       }),
-      prompt: `Текущее время: ${new Date().toISOString()}. Разбери задачу из текста: "${transcript}". 
-               Если есть четкое время, установи is_calendar_synced: true.`,
+      prompt: `Текущее время (ISO): ${new Date().toISOString()}. 
+               Разбери задачу из текста: "${transcript}". 
+               Если пользователь указал конкретную дату или время, установи is_calendar_synced: true. 
+               Если время не указано, due_at: null и is_calendar_synced: false.`,
     })
 
-    // 3. Сохранение в Supabase (auth.uid() подставится автоматически или передай session.user.id)
-    const { data: task, error } = await supabase
+    // 4. Сохранение в Supabase
+    const { data: task, error: dbError } = await supabase
       .from('tasks')
       .insert([{ 
         ...taskData, 
-        user_id: session.user.id,
+        user_id: user.id, // Используем проверенный ID из getUser()
         completed: false 
       }])
       .select().single()
 
-    if (error) throw error
+    if (dbError) throw dbError
 
-    // 4. Синхронизация с Google Calendar
-    // Используем provider_token, который Supabase сохраняет при входе через Google
-    if (taskData.due_at && session.provider_token) {
-      const isSynced = await syncWithGoogle(task, session.provider_token)
+    // 5. Синхронизация с Google Calendar
+    // Используем provider_token из сессии
+    let syncSuccess = false;
+    if (taskData.is_calendar_synced && taskData.due_at && session.provider_token) {
+      syncSuccess = await syncWithGoogle(task, session.provider_token)
       
-      if (isSynced) {
+      if (syncSuccess) {
         await supabase
           .from('tasks')
           .update({ is_calendar_synced: true })
@@ -99,9 +124,10 @@ export async function processVoiceTask(formData: FormData) {
     }
 
     revalidatePath('/')
-    return { success: true, task }
+    return { success: true, task, transcript }
+
   } catch (err) {
     console.error('Ошибка процесса:', err)
-    return { success: false }
+    return { success: false, error: err instanceof Error ? err.message : "Неизвестная ошибка" }
   }
 }
