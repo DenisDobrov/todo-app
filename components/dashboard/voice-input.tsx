@@ -7,11 +7,15 @@ import { processVoiceTask } from '@/app/actions/process-voice'
 import { generateSpeech } from '@/app/actions/speak'
 import { toast } from 'sonner'
 
+// Making refresh after task creation
+import { useRouter } from 'next/navigation'
+
 export function VoiceInput() {
   const [isRecording, setIsRecording] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const mediaRecorder = useRef<MediaRecorder | null>(null)
   const audioChunks = useRef<Blob[]>([])
+  const router = useRouter() // 2. Инициализируй роутер
 
   const startRecording = async () => {
     try {
@@ -77,6 +81,8 @@ export function VoiceInput() {
       // 3. Визуальное уведомление
       if (result.success) {
         toast.success('Задача добавлена!')
+        router.refresh() // 3. ВОТ ЭТО заставит Next.js обновить Server Components на странице
+
       } else if (result.error === "Task not detected") {
         toast.info('Голос распознан, но задача не найдена')
       } else {
