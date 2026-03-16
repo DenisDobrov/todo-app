@@ -4,7 +4,8 @@ import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Mic, Square, Loader2 } from 'lucide-react'
 import { processVoiceTask } from '@/app/actions/process-voice'
-import { toast } from 'sonner' // Если используешь sonner для уведомлений
+import { generateSpeech } from '@/app/actions/speak'
+import { toast } from 'sonner'
 
 export function VoiceInput() {
   const [isRecording, setIsRecording] = useState(false)
@@ -13,57 +14,98 @@ export function VoiceInput() {
   const audioChunks = useRef<Blob[]>([])
 
   const startRecording = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    mediaRecorder.current = new MediaRecorder(stream)
-    audioChunks.current = []
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaRecorder.current = new MediaRecorder(stream)
+      audioChunks.current = []
 
-    mediaRecorder.current.ondataavailable = (event) => {
-      audioChunks.current.push(event.data)
+      mediaRecorder.current.ondataavailable = (event) => {
+        audioChunks.current.push(event.data)
+      }
+
+      mediaRecorder.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' })
+        await handleVoiceProcess(audioBlob)
+      }
+
+      mediaRecorder.current.start()
+      setIsRecording(true)
+    } catch (err) {
+      toast.error('Доступ к микрофону запрещен')
+      console.error(err)
     }
-
-    mediaRecorder.current.onstop = async () => {
-      const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' })
-      await sendAudioToServer(audioBlob)
-    }
-
-    mediaRecorder.current.start()
-    setIsRecording(true)
   }
 
   const stopRecording = () => {
-    mediaRecorder.current?.stop()
-    setIsRecording(false)
-    setIsProcessing(true)
+    if (mediaRecorder.current && isRecording) {
+      mediaRecorder.current.stop()
+      setIsRecording(false)
+      // Останавливаем все дорожки микрофона
+      mediaRecorder.current.stream.getTracks().forEach(track => track.stop())
+    }
   }
 
-  const sendAudioToServer = async (blob: Blob) => {
+  const handleVoiceProcess = async (blob: Blob) => {
+    setIsProcessing(true)
     const formData = new FormData()
     formData.append('audio', blob, 'recording.webm')
 
-    const result = await processVoiceTask(formData)
-    
-    setIsProcessing(false)
-    if (result.success) {
-      toast.success(`Добавлено: ${result.task.title}`)
-    } else {
-      toast.error('Ошибка обработки голоса')
+    try {
+      const result = await processVoiceTask(formData)
+
+      if (result.success && result.task) {
+        toast.success('Задача добавлена!')
+        
+        // Формируем текст для озвучки
+        const date = result.task.due_at 
+          ? new Date(result.task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          : null
+        
+        const speechText = date 
+          ? `Окей, добавил задачу: ${result.task.title} на ${date}`
+          : `Окей, добавил задачу: ${result.task.title}`
+
+        // Генерируем и воспроизводим голос
+        const audioBase64 = await generateSpeech(speechText)
+        const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`)
+        await audio.play()
+      } else {
+        toast.error('Не удалось обработать голос')
+      }
+    } catch (error) {
+      console.error(error)
+      toast.error('Ошибка при обработке')
+    } finally {
+      setIsProcessing(false)
     }
   }
 
   return (
-    <Button 
-      variant={isRecording ? "destructive" : "default"}
-      disabled={isProcessing}
-      onClick={isRecording ? stopRecording : startRecording}
-      className="rounded-full w-12 h-12 p-0 shadow-lg"
-    >
-      {isProcessing ? (
-        <Loader2 className="animate-spin" />
-      ) : isRecording ? (
-        <Square className="fill-current" />
+    <div className="flex items-center gap-2">
+      {isRecording ? (
+        <Button 
+          variant="destructive" 
+          size="lg" 
+          className="rounded-full h-14 w-14 shadow-lg animate-pulse"
+          onClick={stopRecording}
+        >
+          <Square className="h-6 w-6" />
+        </Button>
       ) : (
-        <Mic />
+        <Button 
+          variant="default" 
+          size="lg" 
+          className="rounded-full h-14 w-14 shadow-lg bg-blue-600 hover:bg-blue-700"
+          onClick={startRecording}
+          disabled={isProcessing}
+        >
+          {isProcessing ? (
+            <Loader2 className="h-6 w-6 animate-spin" />
+          ) : (
+            <Mic className="h-6 w-6" />
+          )}
+        </Button>
       )}
-    </Button>
+    </div>
   )
 }
