@@ -25,6 +25,33 @@ export const SKILL_REGISTRY: Record<string, SkillConfig<any>> = {
       }]);
     }
   },
+  // Выполнение задачи 
+  complete_task: {
+    description: "Отметить задачу или список задач как выполненные. Параметры: title (опционально), all_today (boolean).",
+    schema: z.object({
+      title: z.string().optional(),
+      all_today: z.boolean().optional().default(false)
+    }),
+    handler: async (supabase, user, params) => {
+      let query = supabase
+        .from('tasks')
+        .update({ completed: true })
+        .eq('user_id', user.id);
+
+      if (params.all_today) {
+        const today = new Date().toISOString().split('T')[0];
+        query = query.gte('due_at', `${today}T00:00:00`).lte('due_at', `${today}T23:59:59`);
+      } else if (params.title) {
+        // Поиск по частичному совпадению названия (регистронезависимо)
+        query = query.ilike('title', `%${params.title}%`);
+      } else {
+        return { error: 'Не указана задача для завершения' };
+      }
+
+      const { data, error } = await query;
+      return { data, error };
+    }
+  },
 
   // ПРИЛОЖЕНИЕ: ОБУЧЕНИЕ
   update_learning_status: {

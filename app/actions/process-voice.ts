@@ -11,7 +11,7 @@ import { SKILL_REGISTRY } from '@/lib/ai/registry'
 // Она избавляет нас от хардкода в промпте
 const getIntentContext = (intent: string) => {
   const intentMap: Record<string, string[]> = {
-    tasks: ['create_task', 'delete_tasks', 'complete_tasks'],
+    tasks: ['create_task', 'delete_tasks', 'complete_task'],
     learning: ['update_learning_status', 'explain_course'],
     general: ['chat_response'],
     // ДОБАВЛЯЕМ СЮДА:
