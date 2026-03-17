@@ -1,710 +1,154 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { toast } from 'sonner'
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  useSortable,
-  arrayMove,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
-import { X } from 'lucide-react'
-
-import AuthBar from '@/components/AuthBar'
+import { useState } from 'react'
+import { VoiceInput } from '@/components/dashboard/voice-input'
+import { TaskItem } from '@/components/dashboard/task-item'
+import { 
+  LogOut, 
+  Sparkles, 
+  Circle, 
+  CheckCircle2, 
+  ListTodo,
+  TrendingUp
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { Progress } from '@/components/ui/progress'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 
-type Task = {
-  id: string
-  user_id: string
-  title: string
-  completed: boolean
-  priority: 'low' | 'medium' | 'high'
-  due_at: string | null
-  tags: string[]
-  sort_order: number
-  is_calendar_synced: boolean
-  created_at: string
-}
+export default function TodoClient({ user, initialTasks, learningData, totalProgress }: any) {
+  const router = useRouter()
+  const supabase = createClient()
+  const [activeFilter, setActiveFilter] = useState<any>(null)
 
-type Filter = 'all' | 'active' | 'completed'
-
-function normalizePriority(value: unknown): 'low' | 'medium' | 'high' {
-  if (value === 'high') return 'high'
-  if (value === 'medium') return 'medium'
-  return 'low'
-}
-
-function priorityBadgeClass(priorityRaw: unknown) {
-  const priority = normalizePriority(priorityRaw)
-
-  if (priority === 'high') {
-    return 'bg-red-100 text-red-700 border-red-200'
-  }
-  if (priority === 'medium') {
-    return 'bg-amber-100 text-amber-700 border-amber-200'
-  }
-  return 'bg-emerald-100 text-emerald-700 border-emerald-200'
-}
-
-function prioritySelectClass(priorityRaw: unknown) {
-  const priority = normalizePriority(priorityRaw)
-
-  if (priority === 'high') {
-    return 'border-red-200 bg-red-50 text-red-700'
-  }
-  if (priority === 'medium') {
-    return 'border-amber-200 bg-amber-50 text-amber-700'
-  }
-  return 'border-emerald-200 bg-emerald-50 text-emerald-700'
-}
-
-function TagChipsInput({
-  tags,
-  setTags,
-  placeholder = 'Add tag and press Enter',
-}: {
-  tags: string[]
-  setTags: (tags: string[]) => void
-  placeholder?: string
-}) {
-  const [input, setInput] = useState('')
-
-  function addTag(raw: string) {
-    const tag = raw.trim().replace(/^#/, '')
-    if (!tag) return
-    if (tags.includes(tag)) return
-    setTags([...tags, tag])
-  }
-
-  function removeTag(tagToRemove: string) {
-    setTags(tags.filter((tag) => tag !== tagToRemove))
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault()
-      addTag(input)
-      setInput('')
-    }
-
-    if (e.key === 'Backspace' && !input && tags.length > 0) {
-      setTags(tags.slice(0, -1))
-    }
-  }
-
-  function handleBlur() {
-    if (input.trim()) {
-      addTag(input)
-      setInput('')
-    }
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push('/')
+    router.refresh()
   }
 
   return (
-    <div className="rounded-md border bg-background px-3 py-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {tags.map((tag) => (
-          <span
-            key={tag}
-            className="inline-flex items-center gap-1 rounded-full border bg-secondary px-2 py-1 text-xs"
-          >
-            #{tag}
-            <button
-              type="button"
-              onClick={() => removeTag(tag)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
-
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={handleBlur}
-          placeholder={placeholder}
-          className="min-w-[140px] flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-        />
-      </div>
-    </div>
-  )
-}
-
-function SortableTaskItem({
-  task,
-  onToggle,
-  onDelete,
-  onSaveEdit,
-}: {
-  task: Task
-  onToggle: (task: Task) => void
-  onDelete: (id: string) => void
-  onSaveEdit: (
-    id: string,
-    payload: {
-      title: string
-      priority: Task['priority']
-      due_at: string | null
-      tags: string[]
-    }
-  ) => Promise<void>
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
-    id: task.id,
-  })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  }
-
-  const [isEditing, setIsEditing] = useState(false)
-  const [editTitle, setEditTitle] = useState(task.title)
-  const [editPriority, setEditPriority] = useState<Task['priority']>(
-    normalizePriority(task.priority)
-  )
-  const [editDueAt, setEditDueAt] = useState(task.due_at ? task.due_at.slice(0, 10) : '')
-  const [editTags, setEditTags] = useState<string[]>(task.tags || [])
-
-  useEffect(() => {
-    setEditTitle(task.title)
-    setEditPriority(normalizePriority(task.priority))
-    setEditDueAt(task.due_at ? task.due_at.slice(0, 10) : '')
-    setEditTags(task.tags || [])
-  }, [task])
-
-  async function handleSave() {
-    const trimmed = editTitle.trim()
-    if (!trimmed) {
-      toast.error('Title cannot be empty')
-      return
-    }
-
-    await onSaveEdit(task.id, {
-      title: trimmed,
-      priority: normalizePriority(editPriority),
-      due_at: editDueAt ? new Date(editDueAt).toISOString() : null,
-      tags: editTags,
-    })
-
-    setIsEditing(false)
-  }
-
-  const safePriority = normalizePriority(task.priority)
-
-  return (
-    <div ref={setNodeRef} style={style}>
-      <div className="rounded-2xl border bg-background p-4">
-        {isEditing ? (
-          <div className="space-y-3">
-            <Input
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              placeholder="Task title"
-            />
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <Select
-                value={editPriority}
-                onValueChange={(value) =>
-                  setEditPriority(normalizePriority(value))
-                }
-              >
-                <SelectTrigger className={prioritySelectClass(editPriority)}>
-                  <SelectValue placeholder="Priority" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Low priority</SelectItem>
-                  <SelectItem value="medium">Medium priority</SelectItem>
-                  <SelectItem value="high">High priority</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Input
-                type="date"
-                value={editDueAt}
-                onChange={(e) => setEditDueAt(e.target.value)}
-              />
-            </div>
-
-            <TagChipsInput
-              tags={editTags}
-              setTags={setEditTags}
-              placeholder="Add tag and press Enter"
-            />
-
-            <div className="flex gap-2">
-              <Button size="sm" onClick={handleSave}>
-                Save
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setIsEditing(false)}
-              >
-                Cancel
-              </Button>
-            </div>
+    <div className="min-h-screen bg-[#F8FAFC] font-sans selection:bg-blue-100">
+      {/* HEADER */}
+      <header className="bg-white/80 backdrop-blur-md border-b border-slate-100 sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto px-6 h-16 flex justify-between items-center">
+          <div className="flex flex-col">
+            <span className="font-black text-slate-900 leading-none tracking-tighter text-xl">SOLUTER AI</span>
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Career Transition Platform</span>
           </div>
-        ) : (
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                className="cursor-grab text-muted-foreground"
-                {...attributes}
-                {...listeners}
-              >
-                ⋮⋮
-              </button>
-
-              <Checkbox
-                checked={task.completed}
-                onCheckedChange={() => onToggle(task)}
-              />
-
-              <div className="flex flex-col gap-1">
-                <span
-                  className={
-                    task.completed
-                      ? 'line-through text-muted-foreground'
-                      : 'font-medium'
-                  }
-                >
-                  {task.title}
-                </span>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`rounded-full border px-2 py-0.5 text-xs font-medium ${priorityBadgeClass(
-                      safePriority
-                    )}`}
-                  >
-                    {safePriority}
-                  </span>
-
-                  {task.due_at && (
-                    <Badge variant="outline">
-                      due {new Date(task.due_at).toLocaleDateString()}
-                    </Badge>
-                  )}
-
-                  {(task.tags || []).map((tag) => (
-                    <Badge key={tag} variant="secondary">
-                      #{tag}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
+          <div className="flex items-center gap-4">
+            <div className="hidden md:block text-right">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Student</p>
+              <p className="text-sm font-bold text-slate-700 leading-none">{user?.email?.split('@')[0]}</p>
             </div>
-
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsEditing(true)}
-              >
-                Edit
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onDelete(task.id)}
-              >
-                Delete
-              </Button>
-            </div>
+            <Button variant="ghost" size="icon" onClick={handleLogout} className="rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">
+              <LogOut size={20} />
+            </Button>
           </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-export default function TodoClient({ email }: { email: string }) {
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [title, setTitle] = useState('')
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium')
-  const [dueAt, setDueAt] = useState('')
-  const [tags, setTags] = useState<string[]>([])
-  const [loading, setLoading] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
-  const [filter, setFilter] = useState<Filter>('all')
-
-  const sensors = useSensors(useSensor(PointerSensor))
-
-  // МИН-ФИКС: Создаем userName для AuthBar, чтобы избежать ошибки типов
-  const displayUserName = email.split('@')[0] || 'User'
-
-  async function loadTasks(nextFilter: Filter = filter) {
-    setRefreshing(true)
-
-    try {
-      const res = await fetch(`/api/tasks?filter=${nextFilter}`, {
-        method: 'GET',
-        cache: 'no-store',
-      })
-
-      if (!res.ok) {
-        toast.error('Failed to load tasks')
-        return
-      }
-
-      const data = await res.json()
-      const normalized = Array.isArray(data)
-        ? data.map((task) => ({
-            ...task,
-            priority: normalizePriority(task.priority),
-            tags: Array.isArray(task.tags) ? task.tags : [],
-          }))
-        : []
-
-      setTasks(normalized)
-    } catch {
-      toast.error('Failed to load tasks')
-    } finally {
-      setRefreshing(false)
-    }
-  }
-
-  useEffect(() => {
-    loadTasks(filter)
-  }, [filter])
-
-  async function addTask(e: React.FormEvent) {
-    e.preventDefault()
-    const trimmed = title.trim()
-    if (!trimmed) return
-
-    setLoading(true)
-
-    try {
-      const res = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: trimmed,
-          priority: normalizePriority(priority),
-          due_at: dueAt ? new Date(dueAt).toISOString() : null,
-          tags,
-        }),
-      })
-
-      if (!res.ok) {
-        toast.error('Failed to create task')
-        return
-      }
-
-      setTitle('')
-      setPriority('medium')
-      setDueAt('')
-      setTags([])
-      await loadTasks(filter)
-      toast.success('Learning task created')
-    } catch {
-      toast.error('Failed to create task')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function toggleTask(task: Task) {
-    try {
-      const res = await fetch(`/api/tasks/${task.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ completed: !task.completed }),
-      })
-
-      if (!res.ok) {
-        toast.error('Failed to update task')
-        return
-      }
-
-      await loadTasks(filter)
-      toast.success(task.completed ? 'Task reopened' : 'Task completed')
-    } catch {
-      toast.error('Failed to update task')
-    }
-  }
-
-  async function deleteTask(id: string) {
-    try {
-      const res = await fetch(`/api/tasks/${id}`, {
-        method: 'DELETE',
-      })
-
-      if (!res.ok) {
-        toast.error('Failed to delete task')
-        return
-      }
-
-      await loadTasks(filter)
-      toast.success('Task deleted')
-    } catch {
-      toast.error('Failed to delete task')
-    }
-  }
-
-  async function saveEdit(
-    id: string,
-    payload: {
-      title: string
-      priority: Task['priority']
-      due_at: string | null
-      tags: string[]
-    }
-  ) {
-    try {
-      const res = await fetch(`/api/tasks/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...payload,
-          priority: normalizePriority(payload.priority),
-        }),
-      })
-
-      if (!res.ok) {
-        toast.error('Failed to save task')
-        return
-      }
-
-      await loadTasks(filter)
-      toast.success('Task updated')
-    } catch {
-      toast.error('Failed to save task')
-    }
-  }
-
-  async function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-
-    const oldIndex = tasks.findIndex((t) => t.id === active.id)
-    const newIndex = tasks.findIndex((t) => t.id === over.id)
-
-    if (oldIndex < 0 || newIndex < 0) return
-
-    const reordered = arrayMove(tasks, oldIndex, newIndex).map((task, index) => ({
-      ...task,
-      sort_order: index,
-    }))
-
-    setTasks(reordered)
-
-    try {
-      await Promise.all(
-        reordered.map((task) =>
-          fetch(`/api/tasks/${task.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sort_order: task.sort_order }),
-          })
-        )
-      )
-    } catch {
-      toast.error('Failed to save new order')
-      await loadTasks(filter)
-    }
-  }
-
-  const completedCount = useMemo(
-    () => tasks.filter((task) => task.completed).length,
-    [tasks]
-  )
-
-  const inProgressCount = tasks.length - completedCount
-  const progressValue =
-    tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0
-
-  return (
-    <main className="min-h-screen bg-muted/30 p-6">
-      <div className="mx-auto max-w-4xl">
-        {/* МИН-ФИКС: Передаем userName вместо email */}
-        <AuthBar userName={displayUserName} />
-
-        <div className="mb-6 grid gap-4 md:grid-cols-3">
-          <Card className="shadow-sm">
-            <CardContent className="p-5">
-              <div className="text-sm text-muted-foreground">Current focus</div>
-              <div className="mt-2 text-lg font-semibold">AI Career Transition</div>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm">
-            <CardContent className="p-5">
-              <div className="text-sm text-muted-foreground">Completed</div>
-              <div className="mt-2 text-2xl font-semibold">{completedCount}</div>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm">
-            <CardContent className="p-5">
-              <div className="text-sm text-muted-foreground">In progress</div>
-              <div className="mt-2 text-2xl font-semibold">{inProgressCount}</div>
-            </CardContent>
-          </Card>
         </div>
+      </header>
 
-        <Card className="shadow-sm">
-          <CardHeader className="space-y-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <CardTitle className="text-3xl">Learning Dashboard</CardTitle>
-                <CardDescription>
-                  Track your roadmap, complete milestones, and move into AI roles step by step
-                </CardDescription>
-              </div>
-
-              <Badge variant="secondary">
-                {refreshing ? 'Updating...' : `${completedCount}/${tasks.length} done`}
-              </Badge>
+      <main className="max-w-5xl mx-auto px-6 py-10 space-y-10">
+        
+        {/* PROGRESS CARD (Дизайн SOLUTER AI) */}
+        <section className="bg-white rounded-[2.5rem] p-10 shadow-sm border border-slate-100 relative overflow-hidden group">
+          <div className="absolute -top-12 -right-12 w-40 h-40 bg-blue-50 rounded-full blur-3xl opacity-50 group-hover:opacity-100 transition-opacity" />
+          
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp size={16} className="text-blue-500" />
+              <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.2em]">Learning path</p>
             </div>
+            
+            <h1 className="text-4xl font-black text-slate-900 mb-10 leading-[1.1] tracking-tight">
+              Machine Learning<br />Engineer <span className="text-blue-600">.</span>
+            </h1>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Career transition progress</span>
-                <span className="font-medium">{progressValue}%</span>
+            <div className="space-y-3 mb-12 max-w-md">
+              <div className="flex justify-between items-end">
+                <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Career progress</span>
+                <span className="text-2xl font-black text-slate-900 leading-none">{totalProgress}%</span>
               </div>
-              <Progress value={progressValue} />
-            </div>
-          </CardHeader>
-
-          <CardContent className="space-y-6">
-            <form onSubmit={addTask} className="grid gap-3 md:grid-cols-2">
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Add a learning milestone..."
-                className="md:col-span-2"
-              />
-
-              <Select
-                value={priority}
-                onValueChange={(value) =>
-                  setPriority(normalizePriority(value))
-                }
-              >
-                <SelectTrigger className={prioritySelectClass(priority)}>
-                  <SelectValue placeholder="Priority" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Low priority</SelectItem>
-                  <SelectItem value="medium">Medium priority</SelectItem>
-                  <SelectItem value="high">High priority</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Input
-                type="date"
-                value={dueAt}
-                onChange={(e) => setDueAt(e.target.value)}
-              />
-
-              <div className="md:col-span-2">
-                <TagChipsInput
-                  tags={tags}
-                  setTags={setTags}
-                  placeholder="Add tag and press Enter"
+              <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-slate-900 transition-all duration-1000 ease-out rounded-full" 
+                  style={{ width: `${totalProgress}%` }}
                 />
               </div>
-
-              <div className="md:col-span-2">
-                <Button type="submit" disabled={loading}>
-                  {loading ? 'Adding...' : 'Add'}
-                </Button>
-              </div>
-            </form>
-
-            <Separator />
-
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant={filter === 'all' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFilter('all')}
-              >
-                All
-              </Button>
-              <Button
-                variant={filter === 'active' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFilter('active')}
-              >
-                Active
-              </Button>
-              <Button
-                variant={filter === 'completed' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFilter('completed')}
-              >
-                Completed
-              </Button>
             </div>
 
-            <Separator />
-
-            {tasks.length === 0 ? (
-              <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-                No milestones yet. Add your first AI learning task.
-              </div>
-            ) : (
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext
-                  items={tasks.map((task) => task.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  <div className="space-y-3">
-                    {tasks.map((task) => (
-                      <SortableTaskItem
-                        key={task.id}
-                        task={task}
-                        onToggle={toggleTask}
-                        onDelete={deleteTask}
-                        onSaveEdit={saveEdit}
-                      />
-                    ))}
+            {/* LIST OF COURSES */}
+            <div className="space-y-4">
+              {learningData.length > 0 ? learningData.map((course: any) => (
+                <div key={course.id} className="flex items-center justify-between p-5 rounded-2xl border border-slate-100 bg-white hover:shadow-md transition-all group/item">
+                  <div className="flex items-center gap-5">
+                    <div className={`${course.status === 'done' ? 'text-green-500' : 'text-slate-200'} transition-colors`}>
+                      {course.status === 'done' ? <CheckCircle2 size={26} /> : <Circle size={26} />}
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-slate-800 tracking-tight leading-none mb-1.5">{course.title}</h3>
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-tighter">
+                        {course.status === 'done' ? 'Completed' : course.status === 'active' ? 'In progress' : 'Upcoming'}
+                      </p>
+                    </div>
                   </div>
-                </SortableContext>
-              </DndContext>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </main>
+                  <div className={`text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest transition-colors ${
+                    course.status === 'done' ? 'bg-slate-100 text-slate-400' : 
+                    course.status === 'active' ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-300'
+                  }`}>
+                    {course.status === 'done' ? 'Done' : course.status === 'active' ? 'Active' : 'Locked'}
+                  </div>
+                </div>
+              )) : (
+                <p className="text-center py-10 text-slate-400 italic border-2 border-dashed border-slate-50 rounded-3xl">Загружаем программу обучения...</p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* BOTTOM SECTION: ASSISTANT & TASKS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+          
+          {/* VOICE BOX */}
+          <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white flex flex-col items-center justify-center relative overflow-hidden min-h-[300px]">
+            <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-400 via-transparent to-transparent" />
+            <div className="relative z-10 flex flex-col items-center">
+               <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] mb-8">Voice Command</p>
+               <VoiceInput onAction={(action, params) => {
+                 if (action === 'filter') setActiveFilter(params)
+               }} />
+               <p className="mt-8 text-slate-500 text-[11px] font-medium text-center max-w-[200px]">
+                 "Я закончил курс Python" <br/> или "Что на сегодня?"
+               </p>
+            </div>
+          </div>
+
+          {/* TASKS BOX */}
+          <div className="bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-sm">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-50 p-2 rounded-xl">
+                  <ListTodo size={20} className="text-blue-600" />
+                </div>
+                <h2 className="font-black text-slate-900 uppercase text-xs tracking-[0.15em]">Daily Tasks</h2>
+              </div>
+              <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded tracking-widest">
+                {initialTasks.length}
+              </span>
+            </div>
+            
+            <div className="space-y-4 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+              {initialTasks.map((task: any) => (
+                <TaskItem key={task.id} task={task} />
+              ))}
+              {initialTasks.length === 0 && (
+                <div className="text-center py-10 opacity-30 italic text-sm">
+                  Нет текущих задач
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
   )
 }

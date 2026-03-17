@@ -10,32 +10,52 @@ import { FAQ } from "@/components/landing/faq"
 import { FinalCTA } from "@/components/landing/final-cta"
 import { Footer } from "@/components/landing/footer"
 
-// GEMINI VOICE
+// GEMINI VOICE / LEARNING
 import { createClient } from '@/lib/supabase/server'
-import TodoDashboard from "@/components/dashboard/todo-dashboard"
+import TodoClient from "@/app/todo-client" // Используем наш новый крутой клиент
 
 export default async function Home() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Если пользователь залогинен, показываем приложение
-if (user) {
-    // 2. ЗАГРУЖАЕМ ЗАДАЧИ из Supabase (чтобы не было ошибки)
+  // Если пользователь залогинен, показываем новый AI Dashboard
+  if (user) {
+    // 1. Загружаем задачи
     const { data: tasks } = await supabase
       .from('tasks')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    const userName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'
-    const email = user.email || ''
+    // 2. Загружаем курсы
+    const { data: courses } = await supabase
+      .from('courses')
+      .select('*')
+      .order('id', { ascending: true })
+
+    // 3. Загружаем прогресс
+    const { data: progress } = await supabase
+      .from('user_progress')
+      .select('course_id, status')
+      .eq('user_id', user.id)
+
+    // Мапим данные для интерфейса
+    const learningData = courses?.map(course => ({
+      ...course,
+      status: progress?.find(p => p.course_id === course.id)?.status || 'not_started'
+    })) || []
+
+    const doneCount = progress?.filter(p => p.status === 'done').length || 0
+    const totalProgress = courses?.length ? Math.round((doneCount / courses.length) * 100) : 0
+    const userName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Student'
 
     return (
-      <TodoDashboard 
-        initialTasks={tasks || []} // Обязательно передаем массив задач
-        user={user} 
-        userName={userName} 
-        email={email} 
+      <TodoClient 
+        user={user}
+        userName={userName}
+        initialTasks={tasks || []}
+        learningData={learningData}
+        totalProgress={totalProgress}
       />
     )
   }

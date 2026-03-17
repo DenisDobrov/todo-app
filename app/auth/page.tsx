@@ -58,7 +58,7 @@ export default function AuthPage() {
         if (error) throw error
         toast.success('Вы вошли')
       }
-      router.push('/')
+      router.push('/dashboard') // Было router.push('/'), изменено на router.push('/dashboard') для перенаправления на страницу дашборда после входа 
       router.refresh()
     } catch (err: any) {
       toast.error(err.message ?? 'Ошибка авторизации')

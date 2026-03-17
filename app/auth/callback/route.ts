@@ -14,7 +14,10 @@ export async function GET(request: Request) {
     
     if (!error) {
       // КРИТИЧНО: используем origin, чтобы редирект был на тот же домен
-      return NextResponse.redirect(`${origin}${next}`)
+      // return NextResponse.redirect(`${origin}${next}`)
+      // Если параметр next пустой или ведет на корень, принудительно шлем в dashboard
+      const redirectUrl = (next === '/' || !next) ? '/dashboard' : next;
+      return NextResponse.redirect(`${origin}${redirectUrl}`);
     }
   }
 
