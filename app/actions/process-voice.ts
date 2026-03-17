@@ -11,7 +11,7 @@ import { SKILL_REGISTRY } from '@/lib/ai/registry'
 // Она избавляет нас от хардкода в промпте
 const getIntentContext = (intent: string) => {
   const intentMap: Record<string, string[]> = {
-    tasks: ['create_task', 'delete_tasks', 'complete_task'],
+    tasks: ['create_task', 'delete_tasks', 'complete_task','reschedule_task'],
     learning: ['update_learning_status', 'explain_course'],
     general: ['chat_response'],
     // ДОБАВЛЯЕМ СЮДА:
@@ -132,6 +132,22 @@ export async function processVoiceTask(formData: FormData) {
 
     console.log("🚀 Запуск хендлера...");
     const result = await activeSkill.handler(supabase, user, validation.data);
+
+// СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ RAG (explain_course)
+    if (decision.skill_name === 'explain_course' && result.data) {
+      const ragResponse = await generateObject({
+        model: openai('gpt-4o-mini'),
+        schema: z.object({ answer: z.string() }),
+        prompt: `
+          Ты — эксперт SOLUTER AI. 
+          Используя эти данные о курсах: "${result.data}", 
+          ответь на вопрос пользователя: "${transcript}".
+          Отвечай кратко и вдохновляюще.
+        `
+      });
+      // Подменяем стандартную фразу на умный ответ из базы знаний
+      decision.response_phrase = ragResponse.object.answer;
+    }
     
     if (result?.error) {
       console.error("❌ Ошибка базы данных:", result.error);

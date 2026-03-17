@@ -19,6 +19,7 @@ export default async function DashboardPage() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
+ 
   return (
     <div className="min-h-screen bg-[#FAFAFA] pb-32">
       {/* Top Navigation / Header */}

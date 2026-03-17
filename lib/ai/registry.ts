@@ -52,6 +52,43 @@ export const SKILL_REGISTRY: Record<string, SkillConfig<any>> = {
       return { data, error };
     }
   },
+  // 1. УДАЛЕНИЕ (Чтобы не копить мусор)
+  delete_tasks: {
+    description: "Удаление задач по названию или всех выполненных. Поля: title (название), only_completed (boolean).",
+    schema: z.object({
+      title: z.string().optional(),
+      only_completed: z.boolean().optional().default(false)
+    }),
+    handler: async (supabase, user, params) => {
+      let query = supabase.from('tasks').delete().eq('user_id', user.id);
+      
+      if (params.only_completed) {
+        query = query.eq('completed', true);
+      } else if (params.title) {
+        query = query.ilike('title', `%${params.title}%`);
+      } else {
+        return { error: 'Укажите, что именно удалить' };
+      }
+      return await query;
+    }
+  },
+
+  // 2. ПЕРЕНОС (Reschedule)
+  reschedule_task: {
+    description: "Перенос задачи на другое время/дату. Поля: title (название), new_date (ISO дата/время).",
+    schema: z.object({
+      title: z.string(),
+      new_date: z.string()
+    }),
+    handler: async (supabase, user, params) => {
+      console.log(`📅 Перенос задачи "${params.title}" на ${params.new_date}`);
+      return await supabase
+        .from('tasks')
+        .update({ due_at: params.new_date })
+        .eq('user_id', user.id)
+        .ilike('title', `%${params.title}%`);
+    }
+  },
 
   // ПРИЛОЖЕНИЕ: ОБУЧЕНИЕ
   update_learning_status: {
@@ -70,6 +107,44 @@ export const SKILL_REGISTRY: Record<string, SkillConfig<any>> = {
       });
     }
   },
+  // Новый навык объяснение обучения 
+    explain_course: {
+        description: "Поиск подробной информации о курсах, темах и учебном плане. Параметр: query (вопрос пользователя).",
+        schema: z.object({
+          query: z.string().describe("Конкретный вопрос по содержанию курсов")
+        }),
+handler: async (supabase, user, params) => {
+      const embeddingRes = await fetch('https://api.openai.com/v1/embeddings', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          input: params.query,
+          model: 'text-embedding-3-small'
+        })
+      });
+      
+      const { data: [{ embedding }] } = await embeddingRes.json();
+
+      const { data: matches, error } = await supabase.rpc('match_courses', {
+        query_embedding: embedding,
+        match_threshold: 0.25, // Снизили порог для лучшего охвата
+        match_count: 5         // Берем чуть больше вариантов для выбора
+      });
+
+      if (error) return { error: error.message };
+
+      // Формируем более богатый контекст
+      const context = matches && matches.length > 0 
+        ? matches.map((m: any) => 
+            `ID: ${m.id}, Название: ${m.title}, Описание: ${m.description}, Уровень: ${m.level}`
+          ).join('\n---\n')
+        : "В базе данных нет точного совпадения, но предложи изучить основы ИИ.";
+
+      return { data: context };
+    }      },
  // Навигация голосом  
   ui_navigation: {
     description: "Навигация по интерфейсу. Параметры: target (tasks|learning|stats), section_id (опционально).",
