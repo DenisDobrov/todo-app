@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { LogOut, User, FilterX, Sparkles } from 'lucide-react'
+import { LogOut, User, FilterX, Sparkles, Calendar as CalendarIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { VoiceInput } from './voice-input'
 import { TaskItem } from './task-item'
@@ -11,8 +11,6 @@ import { TaskItem } from './task-item'
 export default function TodoDashboard({ initialTasks, userName }: any) {
   const router = useRouter()
   const supabase = createClient()
-  
-  // Состояние активного фильтра
   const [activeFilter, setActiveFilter] = useState<{ priority_level?: string | null } | null>(null)
 
   const handleLogout = async () => {
@@ -21,20 +19,51 @@ export default function TodoDashboard({ initialTasks, userName }: any) {
     router.refresh()
   }
 
-  // Колбэк для обработки команд от VoiceInput
   const handleVoiceAction = (action: string, params: any) => {
     if (action === 'filter') {
-      console.log("🎨 Применяю фильтр в UI:", params);
-      setActiveFilter(params);
+      setActiveFilter(params)
     }
   }
 
-  // Фильтруем список задач перед рендерингом
-  const displayTasks = initialTasks.filter((task: any) => {
-    if (!activeFilter) return true;
-    if (activeFilter.priority_level && task.priority !== activeFilter.priority_level) return false;
-    return true;
+  // 1. Фильтрация
+  const filtered = initialTasks.filter((task: any) => {
+    if (!activeFilter || activeFilter.priority_level === null) return true;
+    return task.priority === activeFilter.priority_level;
   });
+
+  // 2. Группировка по датам
+  const groupedTasks = {
+    today: filtered.filter((t: any) => {
+      if (!t.due_at) return false;
+      const d = new Date(t.due_at);
+      return d.toDateString() === new Date().toDateString();
+    }),
+    tomorrow: filtered.filter((t: any) => {
+      if (!t.due_at) return false;
+      const d = new Date(t.due_at);
+      const tom = new Date(); tom.setDate(tom.getDate() + 1);
+      return d.toDateString() === tom.toDateString();
+    }),
+    later: filtered.filter((t: any) => {
+      if (!t.due_at) return true; // Задачи без даты тоже сюда
+      const d = new Date(t.due_at);
+      const tom = new Date(); tom.setDate(tom.getDate() + 1);
+      return d > tom && d.toDateString() !== tom.toDateString();
+    })
+  };
+
+  const Section = ({ title, tasks }: { title: string, tasks: any[] }) => (
+    tasks.length > 0 ? (
+      <div className="space-y-3 mb-8">
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2 px-2">
+          <CalendarIcon size={14} /> {title}
+        </h3>
+        <div className="grid gap-3">
+          {tasks.map(task => <TaskItem key={task.id} task={task} />)}
+        </div>
+      </div>
+    ) : null
+  );
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-4">
@@ -46,45 +75,38 @@ export default function TodoDashboard({ initialTasks, userName }: any) {
               {userName[0]}
             </div>
             <div>
-              <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Smart Assistant</p>
+              <p className="text-xs text-slate-400 font-medium">Assistant Active</p>
               <p className="font-bold text-slate-800">{userName}</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-slate-400 hover:text-red-500 transition-colors">
-            <LogOut size={18} />
-          </Button>
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-slate-400"><LogOut size={18} /></Button>
         </div>
 
-        {/* Voice Input с передачей экшена */}
-        <div className="flex flex-col items-center py-6 bg-white rounded-3xl shadow-sm border border-slate-100">
+        {/* Voice Input */}
+        <div className="flex flex-col items-center py-6 bg-white rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden">
           <VoiceInput onAction={handleVoiceAction} />
-          
-          {activeFilter && (
-            <div className="mt-4 flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
-              <span className="text-xs font-medium px-2 py-1 bg-blue-50 text-blue-600 rounded-md border border-blue-100 flex items-center gap-1">
-                <Sparkles size={12} /> Фильтр: {activeFilter.priority_level}
+          {activeFilter?.priority_level && (
+            <div className="mt-4 flex items-center gap-2 animate-in slide-in-from-top-2">
+              <span className="text-xs font-bold px-3 py-1 bg-blue-600 text-white rounded-full shadow-sm">
+                Приоритет: {activeFilter.priority_level}
               </span>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-7 text-xs text-slate-400 hover:text-slate-600"
-                onClick={() => setActiveFilter(null)}
-              >
+              <Button variant="ghost" size="sm" onClick={() => setActiveFilter(null)} className="h-7 text-xs">
                 <FilterX size={14} className="mr-1" /> Сбросить
               </Button>
             </div>
           )}
         </div>
 
-        {/* Task List */}
-        <div className="grid gap-3">
-          {displayTasks.map((task: any) => (
-            <TaskItem key={task.id} task={task} />
-          ))}
+        {/* Список задач с группами */}
+        <div className="mt-4">
+          <Section title="Сегодня" tasks={groupedTasks.today} />
+          <Section title="Завтра" tasks={groupedTasks.tomorrow} />
+          <Section title="Позже" tasks={groupedTasks.later} />
           
-          {displayTasks.length === 0 && (
-            <div className="text-center py-12 bg-white/50 rounded-2xl border border-dashed border-slate-200">
-              <p className="text-slate-400">В этом списке пока ничего нет</p>
+          {filtered.length === 0 && (
+            <div className="text-center py-20 bg-white/40 rounded-3xl border border-dashed border-slate-200">
+              <p className="text-slate-400 font-medium">Список пуст</p>
+              <p className="text-xs text-slate-300 mt-1">Нажми на микрофон, чтобы добавить задачу</p>
             </div>
           )}
         </div>
