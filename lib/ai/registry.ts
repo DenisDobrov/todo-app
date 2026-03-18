@@ -157,6 +157,24 @@ handler: async (supabase, user, params) => {
       return { data: 'ui_signal' }; 
     }
   },
+  set_roadmap: {
+    description: "Выбор карьерного пути (Machine Learning Engineer, AI Developer, Data Scientist).",
+    schema: z.object({
+      path_name: z.enum(['ML Engineer', 'AI Developer', 'Data Scientist'])
+    }),
+    handler: async (supabase, user, params) => {
+      // Сохраняем выбор пользователя в профиль или отдельную таблицу
+      const { error } = await supabase
+        .from('profiles')
+        .update({ active_path: params.path_name })
+        .eq('id', user.id);
+        
+      return { 
+        data: `Путь "${params.path_name}" активирован. Маршрут перестроен.`,
+        error 
+      };
+    }
+  },
 
   // ОБЩЕЕ: ЧАТ (с поддержкой пустого объекта)
   chat_response: {
