@@ -1,3 +1,5 @@
+import { logout } from '@/app/auth/actions'; // Создадим этот файл ниже
+
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { CourseList } from '@/components/dashboard/CourseList';
@@ -24,10 +26,19 @@ export default async function DashboardPage() {
     <div className="min-h-screen bg-[#FAFAFA] pb-32">
       {/* Top Navigation / Header */}
       <nav className="h-16 border-b bg-white flex items-center px-8 justify-between sticky top-0 z-40">
-        <span className="font-bold text-xl tracking-tight text-gray-900">SOLUTER <span className="text-blue-600">AI</span></span>
+        <span className="font-bold text-xl tracking-tight text-gray-900">SOLUTER <span className="text-blue-600">AI</span>
+        </span>
+        <div className="flex items-center gap-4">
+        {/* Кнопка Logout */}
+          <form action={logout}>
+            <button className="text-xs font-bold uppercase tracking-wider text-gray-400 hover:text-red-500 transition-colors">
+            Выйти
+            </button>
+          </form>
         <div className="w-10 h-10 rounded-full bg-gray-200 border border-gray-100 overflow-hidden">
           {/* User Avatar Placeholder */}
           <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600" />
+        </div>
         </div>
       </nav>
 
