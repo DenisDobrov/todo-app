@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { SupabaseClient, User } from '@supabase/supabase-js';
 
+import { addToGoogleCalendar } from '@/lib/google/calendar'; // Проверь правильность пути к файлу
+
 export interface SkillConfig<T extends z.ZodRawShape> {
   description: string;
   schema: z.ZodObject<T>;
@@ -10,68 +12,91 @@ export interface SkillConfig<T extends z.ZodRawShape> {
 export const SKILL_REGISTRY: Record<string, SkillConfig<any>> = {
   // ПРИЛОЖЕНИЕ: ЗАДАЧИ
 create_task: {
-    description: "Создание задачи. Если время не указано, ставь is_all_day: true. Для повторов используй recurrence.",
-    schema: z.object({
-      title: z.string(),
-      due_at: z.string().optional().nullable(), // Теперь опционально
-    // Исправление: если придет что-то кроме low/medium/high, ставим medium
-      priority: z.enum(['low', 'medium', 'high']).catch('medium').default('medium'),
-      is_all_day: z.boolean().default(false),
-      // Внутри z.object для create_task:
-      recurrence: z.preprocess(
-        (val) => (val === "" || val === "none" || val === "null" ? null : val),
-        z.enum(['daily', 'weekly', 'monthly', 'yearly']).nullable().optional()
-      ).catch(null) // Если GPT все равно пришлет ерунду, просто ставим null   
-    }),
-      handler: async (supabase, user, params: any) => {
-      // 1. Безопасное создание даты
-      // Если due_at нет или это пустая строка, берем текущее время
-      let taskDate: Date;
-      
-      if (params.due_at && typeof params.due_at === 'string' && params.due_at.trim() !== "") {
-        taskDate = new Date(params.due_at);
-      } else {
-        taskDate = new Date();
-      }
-
-      // Проверка на случай, если пришла некорректная строка (NaN)
-      if (isNaN(taskDate.getTime())) {
-        taskDate = new Date();
-      }
-
-      // 2. Если "Весь день", сбрасываем время в 00:00 для корректной сортировки
-      if (params.is_all_day) {
-        taskDate.setHours(0, 0, 0, 0);
-      }
-      // --- ЛОГИРОВАНИЕ ПАРАМЕТРОВ ---
-      // 3. БЕЗОПАСНОЕ ЛОГИРОВАНИЕ (с защитой от undefined)
-        const displayPriority = String(params?.priority ?? 'medium').toUpperCase();
-        const displayRecurrence = params?.recurrence ? String(params.recurrence).toUpperCase() : 'НЕТ';
-
-        console.log('-----------------------------------');
-        console.log(`🆕 СОЗДАНИЕ ЗАДАЧИ:`);
-        console.log(`📝 Название: "${params?.title || 'Без названия'}"`);
-        console.log(`📅 Дата: ${taskDate.toLocaleString('ru-RU')}`);
-        console.log(`⏰ Режим: ${params?.is_all_day ? '✅ Весь день' : '🕒 Точное время'}`);
-        console.log(`🔥 Приоритет: ${displayPriority}`);
-        console.log(`🔄 Повтор: ${displayRecurrence}`);
-        console.log('-----------------------------------');
-
-      const { data, error } = await supabase
-        .from('tasks')
-        .insert([{
-          user_id: user.id,
-          title: params.title,
-          due_at: taskDate.toISOString(),
-          priority: params.priority,
-          is_all_day: !!params.is_all_day, // приводим к boolean
-          recurrence: params.recurrence || null,
-          completed: false
-        }]);
-
-      return { data, error };
+  description: "Создание задачи. Если время не указано, ставь is_all_day: true. Для повторов используй recurrence.",
+  schema: z.object({
+    title: z.string(),
+    due_at: z.string().optional().nullable(),
+    priority: z.enum(['low', 'medium', 'high']).catch('medium').default('medium'),
+    is_all_day: z.boolean().default(false),
+    recurrence: z.preprocess(
+      (val) => (val === "" || val === "none" || val === "null" ? null : val),
+      z.enum(['daily', 'weekly', 'monthly', 'yearly']).nullable().optional()
+    ).catch(null)
+  }),
+  handler: async (supabase, user, params: any) => {
+    // 1. Подготовка даты
+    let taskDate: Date;
+    if (params.due_at && typeof params.due_at === 'string' && params.due_at.trim() !== "") {
+      taskDate = new Date(params.due_at);
+    } else {
+      taskDate = new Date();
     }
-  },
+
+    if (isNaN(taskDate.getTime())) {
+      taskDate = new Date();
+    }
+
+    if (params.is_all_day) {
+      taskDate.setHours(0, 0, 0, 0);
+    }
+
+    // 2. Логирование
+    const displayPriority = String(params?.priority ?? 'medium').toUpperCase();
+    const displayRecurrence = params?.recurrence ? String(params.recurrence).toUpperCase() : 'НЕТ';
+
+    console.log('-----------------------------------');
+    console.log(`🆕 СОЗДАНИЕ ЗАДАЧИ: "${params?.title}"`);
+    console.log(`📅 Дата: ${taskDate.toLocaleString('ru-RU')}`);
+    console.log(`🔥 Приоритет: ${displayPriority}`);
+    console.log('-----------------------------------');
+
+    // 3. СНАЧАЛА ЗАПИСЫВАЕМ В БАЗУ
+    const { data: newTask, error: dbError } = await supabase
+      .from('tasks')
+      .insert([{
+        user_id: user.id,
+        title: params.title,
+        due_at: taskDate.toISOString(),
+        priority: params.priority,
+        is_all_day: !!params.is_all_day,
+        recurrence: params.recurrence || null,
+        completed: false
+      }])
+      .select()
+      .single();
+
+    if (dbError) return { data: null, error: dbError };
+
+    // 4. ТЕПЕРЬ ИНТЕГРАЦИЯ (когда задача уже создана и ошибок нет)
+    console.log('--- 🛡️ ИНТЕГРАЦИЯ С КАЛЕНДАРЕМ ---');
+    
+    // Пытаемся достать токен из сессии
+    const { data: { session } } = await supabase.auth.getSession();
+    const providerToken = session?.provider_token; 
+
+// Внутри create_task handler в lib/ai/registry.ts
+
+// ... после создания записи в базе (newTask)
+if (providerToken && newTask) {
+  console.log(`🚀 Отправка в Google Calendar...`);
+  const calendarResult = await addToGoogleCalendar(newTask, providerToken);
+  
+  if (calendarResult.id) {
+    console.log(`📅 Google Event ID получен: ${calendarResult.id}`);
+    
+    // ОБНОВЛЯЕМ задачу в базе, добавляя ID календаря
+    await supabase
+      .from('tasks')
+      .update({ google_event_id: calendarResult.id })
+      .eq('id', newTask.id);
+  }
+  }  else {
+      console.log(`⚠️ Токен не найден. Нужно перезайти с правами (scopes) Календаря.`);
+    }
+
+    return { data: newTask, error: null };
+  }
+},
   // Выполнение задачи 
   complete_task: {
     description: "Отметить задачу или список задач как выполненные. Параметры: title (опционально), all_today (boolean).",

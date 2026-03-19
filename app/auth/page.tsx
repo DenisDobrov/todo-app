@@ -26,17 +26,18 @@ export default function AuthPage() {
   async function signInWithGoogle() {
     setLoading(true)
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-          // Запрашиваем права на редактирование календаря
-          scopes: 'https://www.googleapis.com/auth/calendar.events',
-          redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+        // ВАЖНО: добавляем доступ к календарю
+        scopes: 'https://www.googleapis.com/auth/calendar.events', 
+        queryParams: {
+          access_type: 'offline', // чтобы получить refresh_token
+          prompt: 'consent',      // заставить показать окно выбора разрешений
         },
+    },
+
       })
       if (error) throw error
     } catch (err: any) {

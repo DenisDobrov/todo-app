@@ -3,6 +3,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
+import { deleteFromGoogleCalendar } from '@/lib/google/calendar';
+
 export async function toggleTaskStatus(id: string, currentStatus: boolean) {
   const supabase = await createClient()
   
@@ -67,13 +69,54 @@ export async function toggleTaskStatus(id: string, currentStatus: boolean) {
 }
 
 export async function deleteTask(id: string) {
-  const supabase = await createClient()
+  const supabase = await createClient();
   
-  const { error } = await supabase
+  console.log('--- 🗑️ НАЧАЛО УДАЛЕНИЯ ---');
+  console.log(`🆔 ID задачи в БД: ${id}`);
+
+// 1. Получаем данные задачи
+  const { data: task, error: fetchError } = await supabase
+    .from('tasks')
+    .select('title, google_event_id')
+    .eq('id', id)
+    .single();
+
+  if (fetchError) {
+    console.error('❌ Ошибка при поиске задачи:', fetchError.message);
+    throw new Error("Задача не найдена");
+  }
+
+  console.log(`📝 Название: "${task?.title}"`);
+  console.log(`📅 Google Event ID: ${task?.google_event_id || 'ОТСУТСТВУЕТ'}`);
+
+  // 2. Синхронное удаление из Google Calendar
+  if (task?.google_event_id) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const providerToken = session?.provider_token;
+
+    if (providerToken) {
+      console.log('🚀 Отправка запроса на удаление в Google API...');
+      const isDeleted = await deleteFromGoogleCalendar(task.google_event_id, providerToken);
+      console.log(isDeleted ? '✅ Удалено из Google Calendar' : '⚠️ Ошибка удаления из Google (возможно, событие уже удалено вручную)');
+    } else {
+      console.log('⚠️ Токен провайдера не найден, удаление только локально');
+    }
+  }
+
+  // 3. Удаление из базы данных Supabase
+  console.log('📡 Удаление из Supabase...');
+  const { error: deleteError } = await supabase
     .from('tasks')
     .delete()
-    .eq('id', id)
+    .eq('id', id);
 
-  if (error) throw new Error(error.message)
-  revalidatePath('/dashboard')
+  if (deleteError) {
+    console.error('❌ Ошибка удаления из БД:', deleteError.message);
+    throw new Error(deleteError.message);
+  }
+
+  console.log('🏁 УДАЛЕНИЕ ЗАВЕРШЕНО УСПЕШНО');
+  console.log('-------------------------');
+  
+  revalidatePath('/dashboard');
 }
