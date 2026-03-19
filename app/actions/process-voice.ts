@@ -80,7 +80,7 @@ export async function processVoiceTask(formData: FormData) {
     // Получаем описание только нужных скиллов для этого интента
     const skillsDocs = getIntentContext(route.intent);
 
-// 4. ШАГ 3: Executor (Формирование параметров)
+    // 4. ШАГ 3: Executor (Формирование параметров)
     const { object: decision } = await generateObject({
       model: openai('gpt-4o-mini'),
       schema: z.object({
@@ -91,18 +91,22 @@ export async function processVoiceTask(formData: FormData) {
       prompt: `
         Текст пользователя: "${transcript}"
         Категория: ${route.intent}
-        Сегодня: ${new Date().toISOString()} (GMT-3)
+        Сегодня: ${new Date().toLocaleString('ru-RU', { timeZone: 'America/Santiago' })} (Santiago, Chile)
 
         ДОСТУПНЫЕ ФУНКЦИИ И ИХ ПОЛЯ:
         ${skillsDocs}
 
         ${extraData}
 
-        ИНСТРУКЦИЯ:
-        1. Выбери подходящий skill_name из списка выше.
-        2. Заполни parameters_json, используя ТОЛЬКО указанные поля.
-        3. Если это просто беседа, выбирай 'chat_response'.
-        4. Отвечай дружелюбно, как ассистент SOLUTER AI.
+        ИНСТРУКЦИИ ПО ЗАПОЛНЕНИЮ:
+        1. Для задач (tasks): поле priority может быть ТОЛЬКО "low", "medium" или "high". Не используй "normal" или другие слова.
+        2. Если в тексте есть упоминание времени (например, "в 7 утра", "в 18:30"), ОБЯЗАТЕЛЬНО заполни due_at этим временем и поставь is_all_day: false. 
+        Ставь is_all_day: true ТОЛЬКО если время (часы и минуты) вообще не упоминается.
+        3. Если пользователь говорит "каждый день", "раз в месяц" и т.д., заполни поле recurrence (daily, weekly, monthly, yearly).
+        4. Поле recurrence заполняй ТОЛЬКО если пользователь явно сказал "каждый день", "еженедельно" и т.д. 
+        Если это разовая задача (например, "на сегодня"), оставь это поле пустым или null.
+        5. Отвечай дружелюбно и кратко, как ассистент SOLUTER AI.
+        6. Если это просто беседа, выбирай 'chat_response'.
       `
     });
 

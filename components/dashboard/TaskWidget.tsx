@@ -6,13 +6,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toggleTaskStatus, deleteTask } from '@/app/dashboard/actions';
 import { useEffect, useState } from 'react';
 
-interface Task {
-  id: string;
-  title: string;
-  priority: 'low' | 'medium' | 'high';
-  due_at: string | null;
-  completed: boolean;
-}
+  interface Task {
+    id: string;
+    title: string;
+    priority: 'low' | 'medium' | 'high';
+    due_at: string | null;
+    completed: boolean;
+    is_all_day?: boolean;    // Добавь это
+    recurrence?: string | null; // И это
+  }
 
 export function TaskWidget({ tasks }: { tasks: Task[] }) {
   
@@ -153,11 +155,31 @@ function TaskItem({ task, onToggle, onDelete }: { task: Task, onToggle: () => vo
             <span className={`text-sm font-bold ${task.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
               {task.title}
             </span>
-            {task.due_at && (
-              <span className="text-[10px] font-bold text-blue-500/60 uppercase tracking-tighter">
-                {format(parseISO(task.due_at), 'HH:mm', { locale: ru })}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {task.is_all_day ? (
+                <span className="text-[10px] font-bold text-blue-500 uppercase tracking-tight bg-blue-50 px-1.5 rounded">
+                  Весь день
+                </span>
+              ) : (
+                task.due_at && (
+                  <span className="text-[10px] font-medium text-gray-400 uppercase tracking-tight">
+                    {/* Добавляем проверку на валидность даты перед форматированием */}
+                    {(() => {
+                      try {
+                        return format(new Date(task.due_at), 'HH:mm', { locale: ru });
+                      } catch (e) {
+                        return '';
+                      }
+                    })()}
+                  </span>
+                )
+              )}
+              {task.recurrence && (
+                <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                  <span className="opacity-70">🔄</span> {task.recurrence}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
