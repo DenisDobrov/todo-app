@@ -115,33 +115,42 @@ function TaskItem({ task, onToggle, onDelete }: { task: Task, onToggle: () => vo
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, x: -100, transition: { duration: 0.2 } }}
-      className="relative group"
+      className="relative group mb-2"
     >
-      {/* Фон для свайпа (Виден только при перетаскивании) */}
-      <div className="absolute inset-0 bg-red-500 rounded-2xl flex items-center justify-end px-6 text-white text-xs font-bold">
-        Удалить
+      {/* Красная зона (фон) */}
+      <div className="absolute inset-0 bg-red-500 rounded-2xl flex items-center justify-end px-6 text-white text-[10px] font-black uppercase tracking-widest">
+        Удаление...
       </div>
 
       <motion.div
         drag="x"
+        // Ограничиваем свайп только влево и не даем уйти слишком далеко
         dragConstraints={{ left: -100, right: 0 }}
-        dragElastic={0.1}
+        // dragElastic заставляет карточку сопротивляться в конце свайпа
+        dragElastic={0.2}
+        // ВАЖНО: карточка вернется в 0, если её не "выбросили" за порог
+        dragTransition={{ bounceStiffness: 600, bounceDamping: 20 }}
         onDragEnd={(_, info) => {
-          if (info.offset.x < -70) {
-            setIsDeleting(true);
-            onDelete();
+          // Если смахнули достаточно далеко (напр. больше 80px)
+          if (info.offset.x < -80) {
+            if (confirm(`Удалить задачу "${task.title}"?`)) {
+              onDelete();
+            } else {
+              // Если пользователь нажал "Отмена" — возвращаем карточку на место программно
+              // Framer motion сделает это автоматически при следующем рендере или через контроллеры
+            }
           }
         }}
-        className="relative z-10 flex items-center justify-between p-4 bg-white border border-gray-100 rounded-2xl cursor-pointer hover:border-blue-400 active:shadow-inner transition-colors"
+        className="relative z-10 flex items-center justify-between p-4 bg-white border border-gray-100 rounded-2xl cursor-grab active:cursor-grabbing hover:border-blue-400 transition-colors shadow-sm"
       >
         <div className="flex items-center gap-4 flex-grow" onClick={onToggle}>
           <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300
             ${task.completed ? 'bg-blue-600 border-blue-600' : 'border-gray-200'}`}>
-            {task.completed && <motion.span initial={{scale:0}} animate={{scale:1}} className="text-white text-[10px]">✓</motion.span>}
+            {task.completed && <span className="text-white text-[10px]">✓</span>}
           </div>
 
           <div className="flex flex-col">
-            <span className={`text-sm font-bold transition-colors ${task.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+            <span className={`text-sm font-bold ${task.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
               {task.title}
             </span>
             {task.due_at && (
