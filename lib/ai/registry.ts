@@ -107,6 +107,13 @@ export const SKILL_REGISTRY: Record<string, SkillConfig<any>> = {
       });
     }
   },
+  ui_filter: {
+    description: "Фильтрация списка задач на экране. Параметры: filter_type (all|high|active).",
+    schema: z.object({
+      filter_type: z.enum(['all', 'high', 'active'])
+    }),
+    handler: async () => ({ data: 'ui_signal' })
+  },
   // Новый навык объяснение обучения 
     explain_course: {
         description: "Поиск подробной информации о курсах, темах и учебном плане. Параметр: query (вопрос пользователя).",

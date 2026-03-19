@@ -62,12 +62,25 @@ export function VoiceAssistant() {
         window.speechSynthesis.speak(utterance);
 
         // ОБРАБОТКА UI КОМАНД (Навигация)
+
         if (result.action === 'ui_navigation' && result.params?.target) {
           const element = document.getElementById(
             result.params.target === 'learning' ? 'learning-path' : 'tasks-section'
           );
           element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
+
+        // Если пришла команда фильтрации
+        if (result.success && result.action === 'ui_filter') {
+          // Отправляем сигнал, который поймает TaskWidget
+          const event = new CustomEvent('soluter-ui-command', { 
+            detail: { 
+              action: 'ui_filter', 
+              type: result.params.filter_type // Это 'all', 'high' или 'active'
+            } 
+  });
+  window.dispatchEvent(event);
+}
       }
     } catch (err) {
       console.error("Ошибка при обработке голоса:", err);
