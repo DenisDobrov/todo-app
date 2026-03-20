@@ -18,13 +18,16 @@ create_task: {
     due_at: z.string().optional().nullable(),
     priority: z.enum(['low', 'medium', 'high']).catch('medium').default('medium'),
     is_all_day: z.boolean().default(false),
-    course_id: z.string().nullable().optional().catch(null),
+    project_id: z.string().nullable().optional().catch(null), // Теперь строго UUID проекта
     recurrence: z.preprocess(
       (val) => (val === "" || val === "none" || val === "null" ? null : val),
       z.enum(['daily', 'weekly', 'monthly', 'yearly']).nullable().optional()
     ).catch(null)
   }),
   handler: async (supabase, user, params: any) => {
+    
+    let finalProjectId = params.project_id;
+
     // 1. Подготовка даты
     let taskDate: Date;
     if (params.due_at && typeof params.due_at === 'string' && params.due_at.trim() !== "") {
@@ -45,13 +48,14 @@ create_task: {
 
     // 2. Логирование
     const displayPriority = String(params?.priority ?? 'medium').toUpperCase();
-    const displayRecurrence = params?.recurrence ? String(params.recurrence).toUpperCase() : 'НЕТ';
+    // const displayRecurrence = params?.recurrence ? String(params.recurrence).toUpperCase() : 'НЕТ';
 
     console.log('-----------------------------------');
     console.log(`🆕 СОЗДАНИЕ ЗАДАЧИ: "${params?.title}"`);
     console.log(`📅 Дата: ${taskDate.toLocaleString('ru-RU')}`);
     console.log(`🔥 Приоритет: ${displayPriority}`);
-    console.log(`📂 ID Проекта: ${params?.course_id || '❌ НЕ ВЫБРАН'}`);
+    console.log(`📂 ID Проекта: ${finalProjectId || '❌ НЕ ВЫБРАН'}`);
+    console.log("🧩 Параметры от GPT (raw):", params);
     console.log('-----------------------------------');
 
     // 3. СНАЧАЛА ЗАПИСЫВАЕМ В БАЗУ
@@ -59,7 +63,7 @@ create_task: {
       .from('tasks')
       .insert([{
         user_id: user.id,
-        course_id: params.course_id || null,
+        project_id: params.project_id || null, // Привязываем к проекту
         title: params.title,
         due_at: taskDate.toISOString(),
         priority: params.priority,
@@ -166,7 +170,30 @@ if (providerToken && newTask) {
         .ilike('title', `%${params.title}%`);
     }
   },
+// Создание проекта поьзователя 
 
+  create_project: {
+    description: "Создание нового личного проекта. Можно привязать к курсу из библиотеки.",
+    schema: z.object({
+      title: z.string(),
+      course_id: z.string().nullable().optional() // ID из общей таблицы courses
+    }),
+    handler: async (supabase, user, params) => {
+      const { data, error } = await supabase
+        .from('projects')
+        .insert([{
+          user_id: user.id,
+          title: params.title,
+          course_id: params.course_id || null,
+          status: 'active',
+          is_system: false // Личные проекты никогда не системные
+        }])
+        .select()
+        .single();
+
+      return { data, error };
+    }
+  },
   // ПРИЛОЖЕНИЕ: ОБУЧЕНИЕ
   update_learning_status: {
     description: "Обновление прогресса курса. Параметры: course_id, new_status (not_started|active|done).",

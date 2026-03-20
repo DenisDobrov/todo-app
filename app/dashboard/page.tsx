@@ -1,12 +1,11 @@
-import { logout } from '@/app/auth/actions'; // Создадим этот файл ниже
-
+import { logout } from '@/app/auth/actions';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { CourseList } from '@/components/dashboard/CourseList';
-import { TaskWidget } from '@/components/dashboard/TaskWidget';
 import { VoiceAssistant } from '@/components/ui/VoiceAssistant';
 import { ProgressHeader } from '@/components/dashboard/ProgressHeader';
-
+// НОВЫЕ ИМПОРТЫ
+import { TaskContainer } from '@/components/dashboard/TaskContainer';
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -14,36 +13,41 @@ export default async function DashboardPage() {
 
   if (!user) redirect('/login');
 
-  // Получаем задачи и прогресс (замени на свои реальные запросы)
-// ОБНОВЛЕННЫЙ ЗАПРОС С JOIN
-  const { data: tasks, error } = await supabase
+  // 1. Получаем задачи с данными о проектах
+  const { data: tasks } = await supabase
     .from('tasks')
     .select(`
       *,
-      courses (
-        title
+      projects (
+        id,
+        title,
+        is_system
       )
     `)
     .eq('user_id', user.id)
-    .order('due_at', { ascending: true }); // Сортируем по времени выполнения
- 
+    .order('due_at', { ascending: true });
+
+  // 2. Получаем список проектов для фильтрации
+  const { data: projects } = await supabase
+    .from('projects')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('is_system', { ascending: false });
+
   return (
     <div className="min-h-screen bg-[#FAFAFA] pb-32">
-      {/* Top Navigation / Header */}
+      {/* Top Navigation */}
       <nav className="h-16 border-b bg-white flex items-center px-8 justify-between sticky top-0 z-40">
-        <span className="font-bold text-xl tracking-tight text-gray-900">SOLUTER <span className="text-blue-600">AI</span>
+        <span className="font-bold text-xl tracking-tight text-gray-900">
+          SOLUTER <span className="text-blue-600">AI</span>
         </span>
         <div className="flex items-center gap-4">
-        {/* Кнопка Logout */}
           <form action={logout}>
             <button className="text-xs font-bold uppercase tracking-wider text-gray-400 hover:text-red-500 transition-colors">
-            Выйти
+              Выйти
             </button>
           </form>
-        <div className="w-10 h-10 rounded-full bg-gray-200 border border-gray-100 overflow-hidden">
-          {/* User Avatar Placeholder */}
-          <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600" />
-        </div>
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 border border-gray-100 shadow-sm" />
         </div>
       </nav>
 
@@ -60,13 +64,23 @@ export default async function DashboardPage() {
             </div>
           </section>
 
-          {/* Right Column: Tasks & Stats (5/12) */}
+          {/* Right Column: Tasks & Filters (5/12) */}
           <section className="lg:col-span-5 space-y-8">
             <div id="tasks-section" className="sticky top-28">
-              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4 text-right">Upcoming Tasks</h3>
-              <TaskWidget tasks={tasks || []} />
+              <div className="flex justify-between items-end mb-4">
+                 <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+                  Upcoming Tasks
+                </h3>
+                {/* Здесь можно добавить счетчик задач, если захочешь */}
+              </div>
+
+              {/* ЗАМЕНЯЕМ TaskWidget на TaskContainer */}
+              <TaskContainer 
+                initialTasks={tasks || []} 
+                projects={projects || []} 
+              />
               
-              {/* Дополнительный виджет статы (опционально) */}
+              {/* Виджет Weekly Focus остается снизу */}
               <div className="mt-6 p-6 bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl text-white shadow-xl">
                 <p className="text-gray-400 text-xs uppercase font-bold mb-1">Weekly Focus</p>
                 <p className="text-xl font-medium">Neural Networks</p>
@@ -80,7 +94,6 @@ export default async function DashboardPage() {
         </div>
       </main>
 
-      {/* Floating Voice Assistant Bar */}
       <VoiceAssistant />
     </div>
   );

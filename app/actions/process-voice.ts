@@ -10,7 +10,7 @@ import { SKILL_REGISTRY } from '@/lib/ai/registry'
 // Вспомогательная функция для динамической сборки документации скиллов
 const getIntentContext = (intent: string) => {
   const intentMap: Record<string, string[]> = {
-    tasks: ['create_task', 'delete_tasks', 'complete_task', 'reschedule_task'],
+    tasks: ['create_task', 'delete_tasks', 'complete_task', 'reschedule_task','create_project'],
     learning: ['update_learning_status', 'explain_course'],
     general: ['chat_response'],
     ui_command: ['ui_navigation', 'ui_filter']
@@ -60,15 +60,19 @@ export async function processVoiceTask(formData: FormData) {
     });
     console.log("🚦 Роутер выбрал:", route.intent);
 
-    // 3. Подготовка контекста (Оптимизировано: один запрос к базе)
-    const { data: courses } = await supabase
-      .from('courses')
-      .select('id, title')
+    // 3. Подготовка контекста: ТЕПЕРЬ БЕРЕМ ПРОЕКТЫ ПОЛЬЗОВАТЕЛЯ
+    const { data: projects } = await supabase
+      .from('projects')
+      .select('id, title, is_system')
       .eq('user_id', user.id);
 
-    const coursesContext = courses?.map(c => `ID: ${c.id} (Название: ${c.title})`).join('\n') || 'Нет активных курсов';
+    // Создаем понятный список для LLM
+      const projectsContext = projects?.map(p => 
+        `- ${p.title}${p.is_system ? ' (ЭТО СИСТЕМНЫЙ ПРОЕКТ "ВХОДЯЩИЕ")' : ''}: ID ${p.id}`
+      ).join('\n') || 'Проектов нет';
+    
     const skillsDocs = getIntentContext(route.intent);
-    console.log("📦 Контекст курсов для GPT:", coursesContext);
+    console.log("📦 Контекст проектов для GPT:", projectsContext);
     // 4. Executor (Формирование параметров)
     const { object: decision } = await generateObject({
       model: openai('gpt-4o-mini'),
@@ -85,18 +89,18 @@ export async function processVoiceTask(formData: FormData) {
         ДОСТУПНЫЕ ФУНКЦИИ:
         ${skillsDocs}
 
-        ПРОЕКТЫ (ДЛЯ course_id):
-        ${coursesContext}
+        СПИСОК ЛИЧНЫХ ПРОЕКТОВ ПОЛЬЗОВАТЕЛЯ:
+        ${projectsContext}
 
         ПРАВИЛА:
-        1. priority: только "low", "medium", "high". Если пользователь говорит "важно", "срочно", "приоритетно" — ставь "high". 
-        Если "не к спеху" или "низкий приоритет" — "low". В остальных случаях — "medium".
-        2. Время: если есть "в 7 утра", ставь due_at и is_all_day: false. Иначе is_all_day: true.
-        3. Recurrence: daily, weekly, monthly, yearly (только для цикличных задач).
-        4. Проекты (course_id): Если пользователь упоминает название проекта (например, "Deep Learning"), 
-         ты ОБЯЗАН найти наиболее похожее название в списке проектов и подставить его UUID. 
-         Не оставляй поле пустым, если есть явное совпадение по смыслу.
-        5. Отвечай кратко как ассистент SOLUTER AI.
+        1. priority: "low", "medium", "high". Если "важно/срочно" — "high", если "низкий приоритет" — "low". По дефолту "medium".
+        2. Время: если указано время (напр. "в 10:00"), ставь is_all_day: false. Если только дата — is_all_day: true.
+        3. Recurrence: daily, weekly, monthly, yearly.
+        4. Проект (project_id): 
+          - Если пользователь хочет "отложить", "разобраться позже" или говорит "во входящие/инбокс" — найди в списке проект с пометкой (СИСТЕМНЫЙ ПРОЕКТ "ВХОДЯЩИЕ") и возьми его ID.
+          - Если упоминается название другого проекта — используй соответствующий ID.
+          - Если проект не упомянут (например, "купить хлеб") — ставь null.
+        5. Ответ: кратко и дружелюбно, как SOLUTER AI.
       `
     });
 
