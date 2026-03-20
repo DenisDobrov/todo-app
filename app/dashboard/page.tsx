@@ -15,12 +15,17 @@ export default async function DashboardPage() {
   if (!user) redirect('/login');
 
   // Получаем задачи и прогресс (замени на свои реальные запросы)
-  const { data: tasks } = await supabase
+// ОБНОВЛЕННЫЙ ЗАПРОС С JOIN
+  const { data: tasks, error } = await supabase
     .from('tasks')
-    .select('*')
+    .select(`
+      *,
+      courses (
+        title
+      )
+    `)
     .eq('user_id', user.id)
-    .order('created_at', { ascending: false });
-
+    .order('due_at', { ascending: true }); // Сортируем по времени выполнения
  
   return (
     <div className="min-h-screen bg-[#FAFAFA] pb-32">

@@ -184,13 +184,17 @@ if (providerToken && newTask) {
       });
     }
   },
-  ui_filter: {
-    description: "Фильтрация списка задач на экране. Параметры: filter_type (all|high|active).",
-    schema: z.object({
-      filter_type: z.enum(['all', 'high', 'active'])
-    }),
-    handler: async () => ({ data: 'ui_signal' })
-  },
+    ui_filter: {
+      description: "Фильтрация списка задач по проекту или статусу.",
+      schema: z.object({
+        course_id: z.string().nullable().optional(),
+        status: z.enum(['completed', 'active', 'all']).default('all')
+      }),
+      handler: async (supabase, user, params) => {
+        // Этот скилл не пишет в базу, он возвращает параметры для UI
+        return { data: params, error: null };
+      }
+    },
   // Новый навык объяснение обучения 
     explain_course: {
         description: "Поиск подробной информации о курсах, темах и учебном плане. Параметр: query (вопрос пользователя).",
