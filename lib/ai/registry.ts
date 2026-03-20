@@ -18,6 +18,7 @@ create_task: {
     due_at: z.string().optional().nullable(),
     priority: z.enum(['low', 'medium', 'high']).catch('medium').default('medium'),
     is_all_day: z.boolean().default(false),
+    course_id: z.string().nullable().optional().catch(null),
     recurrence: z.preprocess(
       (val) => (val === "" || val === "none" || val === "null" ? null : val),
       z.enum(['daily', 'weekly', 'monthly', 'yearly']).nullable().optional()
@@ -40,6 +41,8 @@ create_task: {
       taskDate.setHours(0, 0, 0, 0);
     }
 
+    
+
     // 2. Логирование
     const displayPriority = String(params?.priority ?? 'medium').toUpperCase();
     const displayRecurrence = params?.recurrence ? String(params.recurrence).toUpperCase() : 'НЕТ';
@@ -48,6 +51,7 @@ create_task: {
     console.log(`🆕 СОЗДАНИЕ ЗАДАЧИ: "${params?.title}"`);
     console.log(`📅 Дата: ${taskDate.toLocaleString('ru-RU')}`);
     console.log(`🔥 Приоритет: ${displayPriority}`);
+    console.log(`📂 ID Проекта: ${params?.course_id || '❌ НЕ ВЫБРАН'}`);
     console.log('-----------------------------------');
 
     // 3. СНАЧАЛА ЗАПИСЫВАЕМ В БАЗУ
@@ -55,6 +59,7 @@ create_task: {
       .from('tasks')
       .insert([{
         user_id: user.id,
+        course_id: params.course_id || null,
         title: params.title,
         due_at: taskDate.toISOString(),
         priority: params.priority,

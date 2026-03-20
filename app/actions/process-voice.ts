@@ -8,13 +8,11 @@ import { revalidatePath } from 'next/cache'
 import { SKILL_REGISTRY } from '@/lib/ai/registry'
 
 // Вспомогательная функция для динамической сборки документации скиллов
-// Она избавляет нас от хардкода в промпте
 const getIntentContext = (intent: string) => {
   const intentMap: Record<string, string[]> = {
-    tasks: ['create_task', 'delete_tasks', 'complete_task','reschedule_task'],
+    tasks: ['create_task', 'delete_tasks', 'complete_task', 'reschedule_task'],
     learning: ['update_learning_status', 'explain_course'],
     general: ['chat_response'],
-    // ДОБАВЛЯЕМ СЮДА:
     ui_command: ['ui_navigation', 'ui_filter']
   };
 
@@ -23,15 +21,14 @@ const getIntentContext = (intent: string) => {
   return Object.entries(SKILL_REGISTRY)
     .filter(([name]) => allowedSkills.includes(name))
     .map(([name, config]) => {
-      // Автоматически вытаскиваем ключи из Zod схемы
       const fields = Object.keys(config.schema.shape).join(', ');
-      return `- ${name}: ${config.description}. Ожидаемые поля в JSON: [${fields}]`;
+      return `- ${name}: ${config.description}. Поля: [${fields}]`;
     })
     .join('\n');
 };
 
 export async function processVoiceTask(formData: FormData) {
-  console.log("--- 🎙️ СТАРТ (ROUTER + DIAGNOSTICS) ---");
+  console.log("--- 🎙️ СТАРТ (PROCESS VOICE) ---");
   const file = formData.get('audio') as File
   if (!file) return { success: false, response_phrase: "Файл не найден" }
 
@@ -59,28 +56,20 @@ export async function processVoiceTask(formData: FormData) {
     const { object: route } = await generateObject({
       model: openai('gpt-4o-mini'),
       schema: z.object({ intent: z.enum(['learning', 'tasks', 'general', 'ui_command']) }),
-      prompt: `
-      Текст пользователя: "${transcript}"
-        Определи категорию:
-     - tasks: создание, удаление, перенос или завершение задач.
-      - learning: вопросы по курсам, поиск информации в базе знаний.
-      - ui_command: навигация по сайту (открой, перейди) ИЛИ фильтрация (покажи только важные, скрой выполненные, покажи все).
-      - general: простое приветствие или болтовня.
-  `
+      prompt: `Текст: "${transcript}". Категории: tasks (задачи), learning (курсы/обучение), ui_command (интерфейс/фильтры), general (болтовня).`
     });
     console.log("🚦 Роутер выбрал:", route.intent);
 
-// 3. ШАГ 2: Подготовка динамического контекста
-    let extraData = "";
-    if (route.intent === 'learning') {
-      const { data: courses } = await supabase.from('courses').select('id, title');
-      extraData = `СПИСОК КУРСОВ ДЛЯ ID: ${courses?.map(c => `${c.title} [${c.id}]`).join(', ')}`;
-    }
+    // 3. Подготовка контекста (Оптимизировано: один запрос к базе)
+    const { data: courses } = await supabase
+      .from('courses')
+      .select('id, title')
+      .eq('user_id', user.id);
 
-    // Получаем описание только нужных скиллов для этого интента
+    const coursesContext = courses?.map(c => `ID: ${c.id} (Название: ${c.title})`).join('\n') || 'Нет активных курсов';
     const skillsDocs = getIntentContext(route.intent);
-
-    // 4. ШАГ 3: Executor (Формирование параметров)
+    console.log("📦 Контекст курсов для GPT:", coursesContext);
+    // 4. Executor (Формирование параметров)
     const { object: decision } = await generateObject({
       model: openai('gpt-4o-mini'),
       schema: z.object({
@@ -93,73 +82,69 @@ export async function processVoiceTask(formData: FormData) {
         Категория: ${route.intent}
         Сегодня: ${new Date().toLocaleString('ru-RU', { timeZone: 'America/Santiago' })} (Santiago, Chile)
 
-        ДОСТУПНЫЕ ФУНКЦИИ И ИХ ПОЛЯ:
+        ДОСТУПНЫЕ ФУНКЦИИ:
         ${skillsDocs}
 
-        ${extraData}
+        ПРОЕКТЫ (ДЛЯ course_id):
+        ${coursesContext}
 
-        ИНСТРУКЦИИ ПО ЗАПОЛНЕНИЮ:
-        1. Для задач (tasks): поле priority может быть ТОЛЬКО "low", "medium" или "high". Не используй "normal" или другие слова.
-        2. Если в тексте есть упоминание времени (например, "в 7 утра", "в 18:30"), ОБЯЗАТЕЛЬНО заполни due_at этим временем и поставь is_all_day: false. 
-        Ставь is_all_day: true ТОЛЬКО если время (часы и минуты) вообще не упоминается.
-        3. Если пользователь говорит "каждый день", "раз в месяц" и т.д., заполни поле recurrence (daily, weekly, monthly, yearly).
-        4. Поле recurrence заполняй ТОЛЬКО если пользователь явно сказал "каждый день", "еженедельно" и т.д. 
-        Если это разовая задача (например, "на сегодня"), оставь это поле пустым или null.
-        5. Отвечай дружелюбно и кратко, как ассистент SOLUTER AI.
-        6. Если это просто беседа, выбирай 'chat_response'.
+        ПРАВИЛА:
+        1. priority: только "low", "medium", "high". Если пользователь говорит "важно", "срочно", "приоритетно" — ставь "high". 
+        Если "не к спеху" или "низкий приоритет" — "low". В остальных случаях — "medium".
+        2. Время: если есть "в 7 утра", ставь due_at и is_all_day: false. Иначе is_all_day: true.
+        3. Recurrence: daily, weekly, monthly, yearly (только для цикличных задач).
+        4. Проекты (course_id): Если пользователь упоминает название проекта (например, "Deep Learning"), 
+         ты ОБЯЗАН найти наиболее похожее название в списке проектов и подставить его UUID. 
+         Не оставляй поле пустым, если есть явное совпадение по смыслу.
+        5. Отвечай кратко как ассистент SOLUTER AI.
       `
     });
 
-    console.log("🎯 GPT выбрал скилл:", decision.skill_name);
+    console.log("🎯 GPT выбрал:", decision.skill_name);
 
-    // 5. Безопасное исполнение
+    // 5. Исполнение
     const activeSkill = SKILL_REGISTRY[decision.skill_name];
     if (!activeSkill) {
-      console.warn("⚠️ Скилл не найден:", decision.skill_name);
       return { success: true, transcript, response_phrase: decision.response_phrase };
     }
+      // ПАРСИНГ СТРОКИ В ОБЪЕКТ
+      let rawParams = {};
+      try {
+        rawParams = JSON.parse(decision.parameters_json);
+      } catch (e) {
+        console.error("❌ GPT прислал кривой JSON:", decision.parameters_json);
+        return { success: false, response_phrase: "Ошибка формата данных." };
+      }
 
-    // Парсинг JSON с защитой
-    const jsonString = decision.parameters_json?.trim() || "{}";
-    let rawParams = {};
-    try {
-      rawParams = JSON.parse(jsonString);
-    } catch (e) {
-      console.error("❌ Ошибка парсинга JSON от GPT");
-    }
-    const validation = activeSkill.schema.safeParse(rawParams);
+      // Валидация уже готового объекта
+      const validation = activeSkill.schema.safeParse(rawParams);
 
     if (!validation.success) {
       console.error("❌ Ошибка валидации параметров:", validation.error.format());
-      return { success: true, transcript, response_phrase: decision.response_phrase };
+      return { success: true, transcript, response_phrase: "Я не смог правильно распознать детали задачи." };
     }
 
     console.log("🚀 Запуск хендлера...");
     const result = await activeSkill.handler(supabase, user, validation.data);
 
-// СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ RAG (explain_course)
+    // Логика RAG для обучения
     if (decision.skill_name === 'explain_course' && result.data) {
       const ragResponse = await generateObject({
         model: openai('gpt-4o-mini'),
         schema: z.object({ answer: z.string() }),
-        prompt: `
-          Ты — эксперт SOLUTER AI. 
-          Используя эти данные о курсах: "${result.data}", 
-          ответь на вопрос пользователя: "${transcript}".
-          Отвечай кратко и вдохновляюще.
-        `
+        prompt: `Данные: "${result.data}". Вопрос: "${transcript}". Ответь кратко и вдохновляюще.`
       });
-      // Подменяем стандартную фразу на умный ответ из базы знаний
       decision.response_phrase = ragResponse.object.answer;
     }
     
     if (result?.error) {
-      console.error("❌ Ошибка базы данных:", result.error);
-      return { success: false, response_phrase: "Ошибка при сохранении в базу." };
+      console.error("❌ Ошибка DB:", result.error);
+      return { success: false, response_phrase: "Не удалось сохранить данные." };
     }
 
     console.log("✅ УСПЕШНО");
-    revalidatePath('/');
+    revalidatePath('/dashboard');
+    
     return { 
       success: true, 
       transcript, 
@@ -170,7 +155,7 @@ export async function processVoiceTask(formData: FormData) {
 
   } catch (err) {
     console.error("🔥 КРИТИЧЕСКИЙ СБОЙ:", err);
-    return { success: false, response_phrase: "Техническая заминка, попробуем еще раз?" };
+    return { success: false, response_phrase: "Произошла ошибка, попробуй еще раз." };
   } finally {
     console.log("--- 🏁 КОНЕЦ ---");
   }
