@@ -12,7 +12,7 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) redirect('/login');
+  if (!user) redirect('/auth');
 
   // 1. Получаем задачи с данными о проектах
   const { data: tasks } = await supabase
