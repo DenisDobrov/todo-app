@@ -86,13 +86,19 @@ export function TaskItem({ task, projects }: { task: any, projects: any[] }) {
               {/* МЕТАДАННЫЕ: Дата, Время, Проект */}
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
                 {/* Дата и время */}
-                {task.due_at && (
-                  <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                    {task.is_all_day ? "📅 Весь день" : new Date(task.due_at).toLocaleString('ru-RU', {
-                      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-                    })}
-                  </span>
-                )}
+              {/* Дата и время */}
+              {task.due_at && (
+                <span className={`text-[11px] flex items-center gap-1 ${
+                  !task.completed && new Date(task.due_at) < new Date() 
+                    ? "text-red-500 font-medium" // Просрочено
+                    : "text-slate-400"           // Обычное состояние
+                }`}>
+                  {task.is_all_day ? "📅 Весь день" : new Date(task.due_at).toLocaleString('ru-RU', {
+                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                  })}
+                  {!task.completed && new Date(task.due_at) < new Date() && " (просрочено)"}
+                </span>
+              )}
 
                 {/* Проект */}
                 {project ? (
@@ -102,7 +108,7 @@ export function TaskItem({ task, projects }: { task: any, projects: any[] }) {
                   </span>
                 ) : (
                   <span className="text-[11px] text-slate-300 italic flex items-center gap-1">
-                    <span className="opacity-50">•</span> #личная
+                    <span className="opacity-50">•</span> #без проекта
                   </span>
                 )}
 
