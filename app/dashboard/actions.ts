@@ -68,6 +68,43 @@ export async function toggleTaskStatus(id: string, currentStatus: boolean) {
   revalidatePath('/dashboard');
 }
 
+export async function updateTask(id: string, updates: any) {
+  const supabase = await createClient();
+
+  console.log('--- � НАЧАЛО ОБНОВЛЕНИЯ ---');
+  console.log(`🆔 ID задачи в БД: ${id}`);
+
+
+  // 1. Обновляем задачу в базе
+  const { data: task, error } = await supabase
+    .from('tasks')
+    .update({
+      title: updates.title,
+      description: updates.description,
+      due_at: updates.due_at,
+      project_id: updates.project_id,
+      priority: updates.priority,
+      is_all_day: updates.is_all_day
+    })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  // 2. Логика синхронизации с Google Calendar (заглушка для расширения)
+  if (task.google_event_id) {
+    // Здесь будет вызов твоего API для Google Calendar
+    // fetch('/api/google-calendar/update', { method: 'POST', body: JSON.stringify(task) })
+  }
+
+  console.log('🏁 ОБНОВЛЕНИЕ ЗАВЕРШЕНО УСПЕШНО');
+  console.log('-------------------------');
+
+  revalidatePath('/dashboard');
+  return { success: true };
+}
+
 export async function deleteTask(id: string) {
   const supabase = await createClient();
   
