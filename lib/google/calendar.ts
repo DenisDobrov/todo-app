@@ -69,6 +69,16 @@ export async function deleteFromGoogleCalendar(eventId: string, accessToken: str
 
 export async function updateInGoogleCalendar(eventId: string, task: any, accessToken: string) {
   try {
+    // 1. ОБЪЯВЛЯЕМ ПЕРЕМЕННЫЕ ВНУТРИ ФУНКЦИИ
+    const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    // Форматируем дату: убираем 'Z' и миллисекунды (split('.')[0]), 
+    // чтобы Google корректно применил локальный часовой пояс
+    const startDateTime = new Date(task.due_at).toISOString().split('.')[0];
+    const endDateTime = new Date(new Date(task.due_at).getTime() + 30 * 60000).toISOString().split('.')[0];
+
+    console.log(`[GoogleCalendarUpdate] Timezone: ${userTimeZone}, Start: ${startDateTime}`);
+
     const response = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
       {
@@ -79,27 +89,29 @@ export async function updateInGoogleCalendar(eventId: string, task: any, accessT
         },
         body: JSON.stringify({
           summary: task.title,
-          description: task.description,
+          description: task.description || '',
           start: {
-            dateTime: task.due_at,
-            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            dateTime: startDateTime,
+            timeZone: userTimeZone,
           },
           end: {
-            // Для PATCH Google требует end, если меняется start. 
-            // Добавляем 30 минут по умолчанию
-            dateTime: new Date(new Date(task.due_at).getTime() + 30 * 60000).toISOString(),
-            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            dateTime: endDateTime,
+            timeZone: userTimeZone,
           },
         }),
       }
     );
 
-    if (!response.ok) {
+if (!response.ok) {
       const errorData = await response.json();
+      console.error('[GoogleCalendarUpdate] Error Details:', errorData);
       throw new Error(`Google Calendar API Error: ${JSON.stringify(errorData)}`);
     }
 
-    return await response.json();
+    const result = await response.json();
+    console.log('[GoogleCalendarUpdate] Success:', result.id);
+    return result;
+
   } catch (error) {
     console.error('Failed to update Google Calendar event:', error);
     throw error;

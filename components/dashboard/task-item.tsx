@@ -59,7 +59,7 @@ export function TaskItem({ task, projects }: { task: any, projects: any[] }) {
         </motion.div>
 
         {/* Основная карточка */}
-        <motion.div
+<motion.div
           style={{ x }}
           drag="x"
           dragConstraints={{ left: 0, right: 0 }}
@@ -69,27 +69,59 @@ export function TaskItem({ task, projects }: { task: any, projects: any[] }) {
             if (info.offset.x < -80) handleSwipeDelete();
           }}
           onTap={() => {
-            if (Math.abs(x.get()) < 5) {
-              setIsEditOpen(true);
-            }
+            if (Math.abs(x.get()) < 5) setIsEditOpen(true);
           }}
           className="relative flex items-center justify-between p-4 border rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer select-none"
         >
-          {/* ... (внутрянка карточки без изменений) ... */}
           <div className="flex items-center gap-4">
+            {/* Точка статуса */}
             <div className={`w-2 h-2 rounded-full shrink-0 ${task.completed ? 'bg-green-500' : 'bg-slate-300'}`} />
-            <div className="flex flex-col gap-1 text-left">
-              <p className={`${task.completed ? "line-through text-muted-foreground" : "font-medium"} transition-all`}>
+            
+            <div className="flex flex-col gap-0.5 text-left">
+              {/* Название задачи */}
+              <p className={`${task.completed ? "line-through text-muted-foreground" : "font-medium"} transition-all leading-tight`}>
                 {task.title}
               </p>
-              {/* Бейджи и т.д. */}
+              
+              {/* МЕТАДАННЫЕ: Дата, Время, Проект */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
+                {/* Дата и время */}
+                {task.due_at && (
+                  <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                    {task.is_all_day ? "📅 Весь день" : new Date(task.due_at).toLocaleString('ru-RU', {
+                      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                    })}
+                  </span>
+                )}
+
+                {/* Проект */}
+                {project ? (
+                  <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
+                    <span className="opacity-50">•</span> 
+                    {project.is_system ? "📥" : "🚀"} {project.title}
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-slate-300 italic flex items-center gap-1">
+                    <span className="opacity-50">•</span> #личная
+                  </span>
+                )}
+
+                {/* Рекурсия (если есть) */}
+                {task.recurrence && (
+                  <span className="text-[10px] text-blue-400/80 font-bold uppercase tracking-tighter flex items-center gap-0.5">
+                    <RefreshCcw className="w-2.5 h-2.5" /> {task.recurrence}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-             <Badge className={`${priorityColors[task.priority as keyof typeof priorityColors]} text-white border-none text-[10px] px-2`}>
+
+          {/* Правая часть: Приоритет и иконка календаря */}
+          <div className="flex items-center gap-2 shrink-0">
+             <Badge className={`${priorityColors[task.priority as keyof typeof priorityColors]} text-white border-none text-[9px] px-1.5 h-4 flex items-center`}>
                {task.priority.toUpperCase()}
              </Badge>
-             {task.google_event_id && <span className="text-[14px]">📅</span>}
+             {task.google_event_id && <span className="text-[14px] grayscale opacity-50">📅</span>}
           </div>
         </motion.div>
       </div>
