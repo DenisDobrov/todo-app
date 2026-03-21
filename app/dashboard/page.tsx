@@ -7,7 +7,6 @@ import { ProgressHeader } from '@/components/dashboard/ProgressHeader';
 // НОВЫЕ ИМПОРТЫ
 import { TaskContainer } from '@/components/dashboard/TaskContainer';
 
-export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   const supabase = await createClient();
