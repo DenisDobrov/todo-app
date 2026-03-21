@@ -8,10 +8,14 @@ import { Button } from '@/components/ui/button'
 import { VoiceInput } from './voice-input'
 import { TaskItem } from './task-item'
 
-export default function TodoDashboard({ initialTasks, userName }: any) {
+// 1. Добавили user в пропсы
+export function TodoDashboard({ tasks, projects, user }: any) {
   const router = useRouter()
   const supabase = createClient()
   const [activeFilter, setActiveFilter] = useState<{ priority_level?: string | null } | null>(null)
+
+  // 2. Определяем userName (чтобы не было ошибки в хедере)
+  const userName = user?.email?.split('@')[0] || 'User'
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -25,13 +29,13 @@ export default function TodoDashboard({ initialTasks, userName }: any) {
     }
   }
 
-  // 1. Фильтрация
-  const filtered = initialTasks.filter((task: any) => {
+  // 3. Исправили фильтрацию (используем tasks вместо initialTasks)
+  const filtered = tasks.filter((task: any) => {
     if (!activeFilter || activeFilter.priority_level === null) return true;
     return task.priority === activeFilter.priority_level;
   });
 
-  // 2. Группировка по датам
+  // 4. Группировка по датам
   const groupedTasks = {
     today: filtered.filter((t: any) => {
       if (!t.due_at) return false;
@@ -45,21 +49,30 @@ export default function TodoDashboard({ initialTasks, userName }: any) {
       return d.toDateString() === tom.toDateString();
     }),
     later: filtered.filter((t: any) => {
-      if (!t.due_at) return true; // Задачи без даты тоже сюда
+      if (!t.due_at) return true; 
       const d = new Date(t.due_at);
       const tom = new Date(); tom.setDate(tom.getDate() + 1);
-      return d > tom && d.toDateString() !== tom.toDateString();
+      // Чтобы не было пересечений с "завтра"
+      const tomorrowStr = tom.toDateString();
+      return d.toDateString() !== tomorrowStr && d > tom;
     })
   };
 
-  const Section = ({ title, tasks }: { title: string, tasks: any[] }) => (
-    tasks.length > 0 ? (
+  // 5. Вспомогательный компонент секции (теперь видит projects)
+  const Section = ({ title, tasks: sectionTasks }: { title: string, tasks: any[] }) => (
+    sectionTasks.length > 0 ? (
       <div className="space-y-3 mb-8">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2 px-2">
           <CalendarIcon size={14} /> {title}
         </h3>
         <div className="grid gap-3">
-          {tasks.map(task => <TaskItem key={task.id} task={task} />)}
+          {sectionTasks.map(task => (
+            <TaskItem 
+              key={task.id} 
+              task={task} 
+              projects={projects} 
+            />
+          ))}
         </div>
       </div>
     ) : null
@@ -72,14 +85,16 @@ export default function TodoDashboard({ initialTasks, userName }: any) {
         <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-blue-400 flex items-center justify-center text-white font-bold">
-              {userName[0]}
+              {userName[0].toUpperCase()}
             </div>
             <div>
               <p className="text-xs text-slate-400 font-medium">Assistant Active</p>
               <p className="font-bold text-slate-800">{userName}</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-slate-400"><LogOut size={18} /></Button>
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-slate-400">
+            <LogOut size={18} />
+          </Button>
         </div>
 
         {/* Voice Input */}
@@ -97,7 +112,7 @@ export default function TodoDashboard({ initialTasks, userName }: any) {
           )}
         </div>
 
-        {/* Список задач с группами */}
+        {/* Список задач */}
         <div className="mt-4">
           <Section title="Сегодня" tasks={groupedTasks.today} />
           <Section title="Завтра" tasks={groupedTasks.tomorrow} />
