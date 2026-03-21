@@ -15,7 +15,8 @@ import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
-export default function TodoClient({ user, initialTasks, learningData, totalProgress }: any) {
+// Добавь projects в деструктуризацию (первая строка функции)
+export default function TodoClient({ user, initialTasks, learningData, totalProgress, projects }: any) {
   const router = useRouter()
   const supabase = createClient()
   const [activeFilter, setActiveFilter] = useState<any>(null)
@@ -138,7 +139,7 @@ export default function TodoClient({ user, initialTasks, learningData, totalProg
             
             <div className="space-y-4 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
               {initialTasks.map((task: any) => (
-                <TaskItem key={task.id} task={task} />
+                <TaskItem key={task.id} task={task} projects={projects} />
               ))}
               {initialTasks.length === 0 && (
                 <div className="text-center py-10 opacity-30 italic text-sm">
