@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
 import { deleteFromGoogleCalendar } from '@/lib/google/calendar';
+import { updateInGoogleCalendar } from "@/lib/google/calendar";
 
 export async function toggleTaskStatus(id: string, currentStatus: boolean) {
   const supabase = await createClient()
@@ -69,40 +70,52 @@ export async function toggleTaskStatus(id: string, currentStatus: boolean) {
 }
 
 export async function updateTask(id: string, updates: any) {
+  console.log(`[UpdateTask] Начинаю обновление задачи ${id}...`);
   const supabase = await createClient();
 
-  console.log('--- � НАЧАЛО ОБНОВЛЕНИЯ ---');
-  console.log(`🆔 ID задачи в БД: ${id}`);
+  try {
+    // 1. Обновляем в Supabase
+    const { data: updatedTask, error: dbError } = await supabase
+      .from('tasks')
+      .update({
+        title: updates.title,
+        description: updates.description,
+        due_at: updates.due_at,
+        project_id: updates.project_id,
+        priority: updates.priority
+      })
+      .eq('id', id)
+      .select()
+      .single();
 
+    if (dbError) {
+      console.error(`[UpdateTask] Ошибка БД: ${dbError.message}`);
+      throw dbError;
+    }
+    console.log(`[UpdateTask] База данных обновлена успешно.`);
 
-  // 1. Обновляем задачу в базе
-  const { data: task, error } = await supabase
-    .from('tasks')
-    .update({
-      title: updates.title,
-      description: updates.description,
-      due_at: updates.due_at,
-      project_id: updates.project_id,
-      priority: updates.priority,
-      is_all_day: updates.is_all_day
-    })
-    .eq('id', id)
-    .select()
-    .single();
+    // 2. Синхронизация с Google
+    if (updatedTask.google_event_id) {
+      console.log(`[UpdateTask] Обнаружен Google Event ID: ${updatedTask.google_event_id}`);
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      const providerToken = session?.provider_token;
 
-  if (error) throw error;
+      if (providerToken) {
+        console.log('[UpdateTask] Токен провайдера найден. Отправляю запрос в Google...');
+        await updateInGoogleCalendar(updatedTask.google_event_id, updatedTask, providerToken);
+        console.log('[UpdateTask] Google Calendar синхронизирован.');
+      } else {
+        console.warn('[UpdateTask] Provider Token отсутствует. Синхронизация невозможна.');
+      }
+    }
 
-  // 2. Логика синхронизации с Google Calendar (заглушка для расширения)
-  if (task.google_event_id) {
-    // Здесь будет вызов твоего API для Google Calendar
-    // fetch('/api/google-calendar/update', { method: 'POST', body: JSON.stringify(task) })
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    console.error(`[UpdateTask] Критическая ошибка:`, error);
+    throw error;
   }
-
-  console.log('🏁 ОБНОВЛЕНИЕ ЗАВЕРШЕНО УСПЕШНО');
-  console.log('-------------------------');
-
-  revalidatePath('/dashboard');
-  return { success: true };
 }
 
 export async function deleteTask(id: string) {

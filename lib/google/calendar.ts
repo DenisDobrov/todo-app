@@ -65,3 +65,43 @@ export async function deleteFromGoogleCalendar(eventId: string, accessToken: str
     return false;
   }
 }
+// lib/google/calendar.ts
+
+export async function updateInGoogleCalendar(eventId: string, task: any, accessToken: string) {
+  try {
+    const response = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          summary: task.title,
+          description: task.description,
+          start: {
+            dateTime: task.due_at,
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          },
+          end: {
+            // Для PATCH Google требует end, если меняется start. 
+            // Добавляем 30 минут по умолчанию
+            dateTime: new Date(new Date(task.due_at).getTime() + 30 * 60000).toISOString(),
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Google Calendar API Error: ${JSON.stringify(errorData)}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Failed to update Google Calendar event:', error);
+    throw error;
+  }
+}
