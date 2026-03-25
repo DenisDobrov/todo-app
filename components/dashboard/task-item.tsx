@@ -8,6 +8,8 @@ import { toggleTaskStatus, deleteTask } from "@/app/dashboard/actions"
 import { useState } from "react" // Добавили
 import { EditTaskDialog } from "./EditTaskDialog" // Добавили
 
+import { formatTaskDate, isOverdue } from "@/lib/utils/date-utils";
+
 const priorityColors = {
   high: "bg-red-500",
   medium: "bg-yellow-500",
@@ -17,6 +19,9 @@ const priorityColors = {
 export function TaskItem({ task, projects }: { task: any, projects: any[] }) {
 
   const [isEditOpen, setIsEditOpen] = useState(false); // Состояние для модалки
+
+  // ... внутри TaskItem перед return
+  const overdue = isOverdue(task.due_at, task.completed);
   
   const project = task.projects;
   
@@ -88,15 +93,13 @@ export function TaskItem({ task, projects }: { task: any, projects: any[] }) {
                 {/* Дата и время */}
               {/* Дата и время */}
               {task.due_at && (
-                <span className={`text-[11px] flex items-center gap-1 ${
-                  !task.completed && new Date(task.due_at) < new Date() 
-                    ? "text-red-500 font-medium" // Просрочено
-                    : "text-slate-400"           // Обычное состояние
+              <span className={`text-[11px] flex items-center gap-1 ${
+                  isOverdue(task.due_at, task.completed) 
+                    ? "text-red-500 font-bold animate-pulse" 
+                    : "text-slate-400 font-medium"
                 }`}>
-                  {task.is_all_day ? "📅 Весь день" : new Date(task.due_at).toLocaleString('ru-RU', {
-                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-                  })}
-                  {!task.completed && new Date(task.due_at) < new Date() && " (просрочено)"}
+                  {formatTaskDate(task.due_at, task.is_all_day)}
+                  {isOverdue(task.due_at, task.completed) && " (просрочено)"}
                 </span>
               )}
 
