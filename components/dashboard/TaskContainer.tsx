@@ -41,6 +41,7 @@ export function TaskContainer({ initialTasks, projects }: TaskContainerProps) {
   const today = filteredTasks.filter(t => t.due_at && isToday(new Date(t.due_at)));
   const tomorrow = filteredTasks.filter(t => t.due_at && isTomorrow(new Date(t.due_at)));
   const later = filteredTasks.filter(t => {
+    if (t.completed) return false; // Убираем выполненные отсюда
     if (!t.due_at) return true;
     const date = new Date(t.due_at);
     return !isToday(date) && !isTomorrow(date);
