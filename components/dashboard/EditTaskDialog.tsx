@@ -54,13 +54,14 @@ export function EditTaskDialog({ task, projects, open, onOpenChange }: any) {
       {/* Добавили max-h-[90vh] и flex flex-col, чтобы диалог не улетал за экран.
         overflow-y-auto позволяет скроллить саму модалку.
       */}
-      <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto flex flex-col">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[425px] max-h-[85vh] overflow-hidden flex flex-col p-0">
+        <DialogHeader className="p-6 pb-2">
           <DialogTitle>Редактировать задачу</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="space-y-4 py-4 flex-1">
-          
+      {/* Контент формы теперь скроллится отдельно от заголовка и футера */}
+    <div className="overflow-y-auto px-6 flex-1 custom-scrollbar">
+     <form id="edit-task-form" onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="space-y-4 py-4">
           <div className="space-y-2">
             <Label>Название</Label>
             <Input 
@@ -141,27 +142,28 @@ export function EditTaskDialog({ task, projects, open, onOpenChange }: any) {
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label>Описание</Label>
-            <Textarea 
-              placeholder="Добавьте детали..."
-              // Изменили resize-none на vertical и ограничили высоту, 
-              // чтобы поле не раздувало модалку до бесконечности
-              className="min-h-[100px] max-h-[200px] overflow-y-auto"
-              value={formData.description}
-              onChange={(e) => setFormData({...formData, description: e.target.value})}
-            />
-          </div>
+      <div className="space-y-2">
+        <Label>Описание</Label>
+        <Textarea 
+          placeholder="Добавьте детали..."
+          className="min-h-[120px] max-h-[300px] overflow-y-auto leading-relaxed"
+          value={formData.description}
+          onChange={(e) => setFormData({...formData, description: e.target.value})}
+        />
+      </div>
+      {/* Добавим немного пустого места в конце, чтобы клавиатура на мобилках не перекрывала инпут */}
+      <div className="h-4" />
+         </form>
+        </div>
 
-          <DialogFooter className="sticky bottom-0 bg-white pt-4 flex flex-col sm:flex-row items-center gap-3">
+        <DialogFooter className="p-6 pt-2 bg-slate-50/50 border-t flex flex-col sm:flex-row items-center gap-3">
             <p className="text-[10px] text-slate-400 hidden sm:block">
-              Нажмите <kbd className="font-sans border rounded px-1 bg-slate-50">Ctrl</kbd> + <kbd className="font-sans border rounded px-1 bg-slate-50">Enter</kbd>
+              Нажмите <kbd className="font-sans border rounded px-1 bg-white">Ctrl</kbd> + <kbd className="font-sans border rounded px-1 bg-white">Enter</kbd>
             </p>
-            <Button type="submit" disabled={loading} className="w-full sm:w-auto">
-              {loading ? "Сохранение..." : "Сохранить"}
+            <Button form="edit-task-form" type="submit" disabled={loading} className="w-full sm:w-auto shadow-sm">
+              {loading ? "Сохранение..." : "Сохранить изменения"}
             </Button>
-          </DialogFooter>
-        </form>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
