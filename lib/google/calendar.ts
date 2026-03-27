@@ -13,10 +13,32 @@ const getRRULE = (recurrence: string | null) => {
 };
 
 export async function addToGoogleCalendar(task: any, accessToken: string) {
+// 1. Первичная проверка входных данных
+  if (!task.due_at || task.due_at === 'null' || task.due_at === '') {
+    console.log(`[GoogleSync] 🚫 Task "${task.title}" skipped: no valid due_at date found.`);
+    return { id: null }; 
+  }
+
   try {
     const timeZone = getUserTimeZone();
+    const taskDate = new Date(task.due_at);
+
+ // 2. Проверка на валидность объекта даты
+    if (isNaN(taskDate.getTime())) {
+      console.log(`[GoogleSync] ❌ Некорректный формат даты: ${task.due_at}. Пропускаем.`);
+      return { id: null };
+    }
+
     const startISO = formatToGoogleISO(task.due_at);
-    const endISO = formatToGoogleISO(new Date(new Date(task.due_at).getTime() + 30 * 60000));
+
+// 3. Если утилита форматирования вернула null (наш новый предохранитель в utils)
+    if (!startISO) {
+      console.log(`[GoogleSync] 🚫 Task "${task.title}" skipped: formatToGoogleISO returned null.`);
+      return { id: null };
+    }
+    // Расчет времени окончания (+30 мин)
+    const endISO = formatToGoogleISO(new Date(taskDate.getTime() + 30 * 60000));
+    console.log(`[GoogleSync] Creating Event: "${task.title}" | Start: ${startISO} | TZ: ${timeZone}`);
 
     const event: any = {
       summary: `📌 ${task.title}`,
@@ -37,13 +59,21 @@ export async function addToGoogleCalendar(task: any, accessToken: string) {
 
 export async function updateInGoogleCalendar(eventId: string, task: any, accessToken: string) {
   try {
+// Если даты нет — удаляем событие из календаря, чтобы оно не висело на старом времени
+    if (!task.due_at || task.due_at === 'null' || task.due_at === '') {
+      console.log(`[GoogleSync] No date for task, deleting event ${eventId}`);
+      await deleteFromGoogleCalendar(eventId, accessToken);
+      return { id: null };
+    }
     const timeZone = getUserTimeZone();
     const startISO = formatToGoogleISO(task.due_at);
+    if (!startISO) {
+      await deleteFromGoogleCalendar(eventId, accessToken);
+      return { id: null };
+    }
     const endISO = formatToGoogleISO(new Date(new Date(task.due_at).getTime() + 30 * 60000));
 
-    console.log(`[GoogleSync] Updating Event ${eventId}`);
-    console.log(`[GoogleSync] TZ: ${timeZone} | Start: ${startISO} | AllDay: ${task.is_all_day}`);
-
+    console.log(`[GoogleSync] Updating Event ${eventId} | TZ: ${timeZone}`);
     const event: any = {
       summary: `📌 ${task.title}`,
       description: task.description || '',

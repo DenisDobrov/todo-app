@@ -7,6 +7,9 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { SKILL_REGISTRY } from '@/lib/ai/registry'
 
+// Используем твою общую утилиту для работы с таймзонами
+import { getUserTimeZone } from '@/lib/utils/date-utils'
+
 // Вспомогательная функция для динамической сборки документации скиллов
 const getIntentContext = (intent: string) => {
   const intentMap: Record<string, string[]> = {
@@ -66,12 +69,17 @@ export async function processVoiceTask(formData: FormData) {
       .select('id, title, is_system')
       .eq('user_id', user.id);
 
-    // Создаем понятный список для LLM
-      const projectsContext = projects?.map(p => 
-        `- ${p.title}${p.is_system ? ' (ЭТО СИСТЕМНЫЙ ПРОЕКТ "ВХОДЯЩИЕ")' : ''}: ID ${p.id}`
-      ).join('\n') || 'Проектов нет';
+    // Улучшенный контекст проектов: помечаем системные проекты
+    const projectsContext = projects?.map(p => 
+      `- ${p.title}${p.is_system ? ` (СИСТЕМНЫЙ ПРОЕКТ "${p.title.toUpperCase()}")` : ''}: ID ${p.id}`
+    ).join('\n') || 'Проектов нет';
     
     const skillsDocs = getIntentContext(route.intent);
+
+    // Используем динамическую таймзону вместо хардкода Santiago
+    const currentTimezone = getUserTimeZone();
+    const now = new Date().toLocaleString('ru-RU', { timeZone: currentTimezone });
+
     console.log("📦 Контекст проектов для GPT:", projectsContext);
     // 4. Executor (Формирование параметров)
     const { object: decision } = await generateObject({
@@ -84,7 +92,7 @@ export async function processVoiceTask(formData: FormData) {
       prompt: `
         Текст пользователя: "${transcript}"
         Категория: ${route.intent}
-        Сегодня: ${new Date().toLocaleString('ru-RU', { timeZone: 'America/Santiago' })} (Santiago, Chile)
+        Сегодняшняя дата и время: ${now} (Часовая зона: ${currentTimezone})
 
         ДОСТУПНЫЕ ФУНКЦИИ:
         ${skillsDocs}
@@ -92,15 +100,17 @@ export async function processVoiceTask(formData: FormData) {
         СПИСОК ЛИЧНЫХ ПРОЕКТОВ ПОЛЬЗОВАТЕЛЯ:
         ${projectsContext}
 
-        ПРАВИЛА:
-        1. priority: "low", "medium", "high". Если "важно/срочно" — "high", если "низкий приоритет" — "low". По дефолту "medium".
-        2. Время: если указано время (напр. "в 10:00"), ставь is_all_day: false. Если только дата — is_all_day: true.
-        3. Recurrence: daily, weekly, monthly, yearly.
-        4. Проект (project_id): 
-          - Если пользователь хочет "отложить", "разобраться позже" или говорит "во входящие/инбокс" — найди в списке проект с пометкой (СИСТЕМНЫЙ ПРОЕКТ "ВХОДЯЩИЕ") и возьми его ID.
-          - Если упоминается название другого проекта — используй соответствующий ID.
-          - Если проект не упомянут (например, "купить хлеб") — ставь null.
-        5. Ответ: кратко и дружелюбно, как SOLUTER AI.
+       ПРАВИЛА ОБРАБОТКИ ПРОЕКТОВ:
+        1. Если пользователь говорит "отложи на когда-нибудь", "в долгий ящик", "напомни когда-нибудь" — ВСЕГДА выбирай ID проекта "Когда-нибудь".
+        2. Если выбран проект "Когда-нибудь", параметр "due_at" ОБЯЗАТЕЛЬНО должен быть null, а "is_all_day" — false. Игнорируй любые даты в тексте для этого проекта.
+        3. Если пользователь хочет "во входящие/инбокс" — выбери ID проекта "Входящие".
+        4. Если проект не упомянут — используй ID проекта "Входящие" по умолчанию.
+
+        ПРАВИЛА ПАРАМЕТРОВ:
+        - priority: "low", "medium", "high". По дефолту "medium".
+        - Время: если указано время ("в 10:00"), ставь is_all_day: false. Если только дата — is_all_day: true.
+        - Recurrence: daily, weekly, monthly, yearly или null.
+        - Ответ: кратко и дружелюбно, как SOLUTER AI.
       `
     });
 

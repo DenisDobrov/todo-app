@@ -29,19 +29,18 @@ create_task: {
     let finalProjectId = params.project_id;
 
     // 1. Подготовка даты
-    let taskDate: Date;
+    // 1. Подготовка даты (теперь может быть строкой или null)
+    let finalDueAt: string | null = null;
+
     if (params.due_at && typeof params.due_at === 'string' && params.due_at.trim() !== "") {
-      taskDate = new Date(params.due_at);
-    } else {
-      taskDate = new Date();
-    }
-
-    if (isNaN(taskDate.getTime())) {
-      taskDate = new Date();
-    }
-
-    if (params.is_all_day) {
-      taskDate.setHours(0, 0, 0, 0);
+      const taskDate = new Date(params.due_at);
+      
+      if (!isNaN(taskDate.getTime())) {
+        if (params.is_all_day) {
+          taskDate.setHours(0, 0, 0, 0);
+        }
+        finalDueAt = taskDate.toISOString();
+      }
     }
 
     
@@ -50,12 +49,12 @@ create_task: {
     const displayPriority = String(params?.priority ?? 'medium').toUpperCase();
     // const displayRecurrence = params?.recurrence ? String(params.recurrence).toUpperCase() : 'НЕТ';
 
+    // 2. Логирование (используем finalDueAt для лога)
     console.log('-----------------------------------');
     console.log(`🆕 СОЗДАНИЕ ЗАДАЧИ: "${params?.title}"`);
-    console.log(`📅 Дата: ${taskDate.toLocaleString('ru-RU')}`);
-    console.log(`🔥 Приоритет: ${displayPriority}`);
-    console.log(`📂 ID Проекта: ${finalProjectId || '❌ НЕ ВЫБРАН'}`);
-    console.log("🧩 Параметры от GPT (raw):", params);
+    console.log(`📅 Дата: ${finalDueAt ? new Date(finalDueAt).toLocaleString('ru-RU') : 'БЕЗ ДАТЫ (Someday)'}`);
+    console.log(`🔥 Приоритет: ${String(params?.priority ?? 'medium').toUpperCase()}`);
+    console.log(`📂 ID Проекта: ${params.project_id || '❌ НЕ ВЫБРАН'}`);
     console.log('-----------------------------------');
 
     // 3. СНАЧАЛА ЗАПИСЫВАЕМ В БАЗУ
@@ -63,9 +62,9 @@ create_task: {
       .from('tasks')
       .insert([{
         user_id: user.id,
-        project_id: params.project_id || null, // Привязываем к проекту
+        project_id: params.project_id || null,
         title: params.title,
-        due_at: taskDate.toISOString(),
+        due_at: finalDueAt, // <--- Теперь тут может быть честный null
         priority: params.priority,
         is_all_day: !!params.is_all_day,
         recurrence: params.recurrence || null,
