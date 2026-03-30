@@ -2,7 +2,7 @@
 
 export const getUserTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-export const formatToGoogleISO = (dateInput: string | Date | null | undefined) => {
+export const formatToGoogleISO = (dateInput: string | Date | null | undefined,isAllDay: boolean = false) => {
   // Если даты нет — возвращаем null, чтобы вызывающий код (календарь) понял это
   if (!dateInput || dateInput === 'null') {
     console.log(`[DateUtils] Google Format: Input is empty, returning null`);
@@ -10,12 +10,17 @@ export const formatToGoogleISO = (dateInput: string | Date | null | undefined) =
   }
 
   const d = new Date(dateInput);
-  
   // Проверка на валидность даты (чтобы не было 1970 года или Invalid Date)
-  if (isNaN(d.getTime())) {
-    return null;
-  }
-
+    if (isNaN(d.getTime())) {
+      return null;
+    }
+    if (isAllDay) {
+    // Используем методы UTC, чтобы игнорировать смещение Боготы (-5)
+        const year = d.getUTCFullYear();
+        const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(d.getUTCDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
   const offset = d.getTimezoneOffset() * 60000;
   const formatted = new Date(d.getTime() - offset).toISOString().split('.')[0];
   
