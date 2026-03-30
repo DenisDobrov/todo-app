@@ -25,8 +25,18 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Обновляем сессию, если она есть
-  await supabase.auth.getUser()
+  // Получаем пользователя
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // 1. Если залогинен и на главной (/) или странице входа (/auth) -> в /dashboard
+  if (user && (request.nextUrl.pathname === '/' || request.nextUrl.pathname === '/auth')) {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
+  // 2. Если НЕ залогинен и лезет в дашборд -> на страницу входа
+  if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
+    return NextResponse.redirect(new URL('/auth', request.url))
+  }
 
   return response
 }
