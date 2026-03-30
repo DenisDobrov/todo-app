@@ -23,25 +23,28 @@ export default function AuthPage() {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [loading, setLoading] = useState(false)
 
+  // auth/page.tsx
+
   async function signInWithGoogle() {
     setLoading(true)
     try {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
-        // ВАЖНО: добавляем доступ к календарю
-        scopes: 'https://www.googleapis.com/auth/calendar.events', 
-        queryParams: {
-          access_type: 'offline', // чтобы получить refresh_token
-          prompt: 'consent',      // заставить показать окно выбора разрешений
+          redirectTo: `${window.location.origin}/auth/callback`, // Используем window.location.origin для гибкости
+          scopes: 'https://www.googleapis.com/auth/calendar.events', 
+          queryParams: {
+            access_type: 'offline',
+            // ИЗМЕНЕНО: убираем 'consent'. 
+            // 'select_account' позволит выбрать почту, если их несколько, но не будет мучить разрешениями.
+            // Если хочешь совсем бесшовно — поставь здесь undefined или вообще удали строку.
+            prompt: 'select_account', 
+          },
         },
-    },
-
       })
       if (error) throw error
     } catch (err: any) {
-      toast.error(err.message ?? 'Ошибка входа через Google')
+      toast.error(err.message ?? 'Ошибка входа')
       setLoading(false)
     }
   }

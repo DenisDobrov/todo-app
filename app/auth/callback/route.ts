@@ -1,26 +1,30 @@
+// app/auth/callback/route.ts
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  // Если в запросе был параметр next (например, /auth?next=/dashboard), 
-  // то после логина отправим туда, иначе на главную
-  const next = searchParams.get('next') ?? '/'
+  
+  // Определяем, куда идти после логина
+  const next = searchParams.get('next') ?? '/dashboard'
 
   if (code) {
+    // Используем твой стандартный серверный клиент
     const supabase = await createClient()
+    
+    // Обмениваем код на сессию (куки установятся автоматически через твой createClient)
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     
     if (!error) {
-      // КРИТИЧНО: используем origin, чтобы редирект был на тот же домен
-      // return NextResponse.redirect(`${origin}${next}`)
-      // Если параметр next пустой или ведет на корень, принудительно шлем в dashboard
+      // Важно: проверяем, что не редиректим на корень, если хотим в дашборд
       const redirectUrl = (next === '/' || !next) ? '/dashboard' : next;
+      
+      // Используем origin (soluter.com), чтобы избежать проблем с cross-origin
       return NextResponse.redirect(`${origin}${redirectUrl}`);
     }
   }
 
-  // Если что-то пошло не так, возвращаем на страницу логина
-  return NextResponse.redirect(`${origin}/auth`)
+  // В случае ошибки возвращаем на страницу входа
+  return NextResponse.redirect(`${origin}/auth?error=auth_callback_failed`)
 }
