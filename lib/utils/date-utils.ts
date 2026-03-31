@@ -2,30 +2,31 @@
 
 export const getUserTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-export const formatToGoogleISO = (dateInput: string | Date | null | undefined,isAllDay: boolean = false) => {
-  // Если даты нет — возвращаем null, чтобы вызывающий код (календарь) понял это
-  if (!dateInput || dateInput === 'null') {
-    console.log(`[DateUtils] Google Format: Input is empty, returning null`);
-    return null;
+export const formatToGoogleISO = (dateInput: string | Date | null | undefined, isAllDay: boolean = false) => {
+  if (!dateInput) return null;
+
+  const dateStr = dateInput.toString();
+  
+  // Проверяем, является ли это "чистой датой" (ISO Date Only)
+  // Если в строке нет времени (двоеточия), значит это весь день
+  const isDateOnly = !dateStr.includes(':') && !dateStr.includes('T');
+
+  if (isAllDay || isDateOnly) {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+
+    // Извлекаем компоненты даты без учета часового пояса
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}`;
   }
 
-  const d = new Date(dateInput);
-  // Проверка на валидность даты (чтобы не было 1970 года или Invalid Date)
-    if (isNaN(d.getTime())) {
-      return null;
-    }
-    if (isAllDay) {
-    // Используем методы UTC, чтобы игнорировать смещение Боготы (-5)
-        const year = d.getUTCFullYear();
-        const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(d.getUTCDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      }
+  // Логика для DateTime (с часовым поясом)
+  const d = new Date(dateStr);
   const offset = d.getTimezoneOffset() * 60000;
-  const formatted = new Date(d.getTime() - offset).toISOString().split('.')[0];
-  
-  console.log(`[DateUtils] Google Format: ${dateInput} -> ${formatted} (TZ: ${getUserTimeZone()})`);
-  return formatted;
+  return new Date(d.getTime() - offset).toISOString().split('.')[0];
 };
 
 export const formatToInputDateTime = (dateInput: string | Date | null) => {

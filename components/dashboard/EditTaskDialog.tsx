@@ -6,40 +6,65 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { updateTask } from "@/app/dashboard/actions"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { RefreshCcw, Sparkles } from "lucide-react"
 import { formatToInputDateTime } from "@/lib/utils/date-utils"
+import { useRouter } from 'next/navigation' // Импортируй роутер
+
+// Добавь импорт экшена создания, если он у тебя в том же файле, что и updateTask
+import { updateTask, createTask } from "@/app/dashboard/actions"
 
 export function EditTaskDialog({ task, projects, open, onOpenChange }: any) {
+  const router = useRouter() // Инициализируй
   const [loading, setLoading] = useState(false)
+
+  // Инициализация: если task есть — редактируем, если нет — создаем новую
+  const isEdit = !!task;
+
+// Инициализируем через функцию, чтобы безопасно обработать отсутствие task
   const [formData, setFormData] = useState({
-    title: task.title,
-    description: task.description || "",
-    due_at: formatToInputDateTime(task.due_at),
-    project_id: task.project_id,
-    priority: task.priority,
-    is_all_day: task.is_all_day || false,
-    recurrence: task.recurrence || "none"
+    title: "",
+    description: "",
+    due_at: "",
+    project_id: projects[0]?.id || "",
+    priority: "medium",
+    is_all_day: false,
+    recurrence: "none"
   })
 
-  // Определяем, является ли выбранный проект "Когда-нибудь"
+// Важно: сбрасывать форму, когда открываем диалог на СОЗДАНИЕ (чтобы не оставались старые данные)
+// Этот эффект "наполняет" форму при открытии
+  useEffect(() => {
+    if (open) {
+      if (isEdit && task) {
+        setFormData({
+          title: task.title || "",
+          description: task.description || "",
+          due_at: task.due_at ? formatToInputDateTime(task.due_at) : "",
+          project_id: task.project_id,
+          priority: task.priority || "medium",
+          is_all_day: task.is_all_day || false,
+          recurrence: task.recurrence || "none"
+        });
+      } else {
+        // Сброс для НОВОЙ задачи
+        setFormData({
+          title: "",
+          description: "",
+          due_at: "",
+          project_id: projects[0]?.id || "",
+          priority: "medium",
+          is_all_day: false,
+          recurrence: "none"
+        });
+      }
+    }
+  }, [open, isEdit, task, projects]);
+
   const isSomedayProject = projects.find(
     (p: any) => p.id === formData.project_id && p.title === "Когда-нибудь"
   );
-
-  // Эффект для автоматического сброса даты при выборе Someday
-  useEffect(() => {
-    if (isSomedayProject) {
-      setFormData(prev => ({
-        ...prev,
-        due_at: "",
-        is_all_day: false,
-        recurrence: "none"
-      }));
-    }
-  }, [formData.project_id, !!isSomedayProject]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -54,14 +79,19 @@ export function EditTaskDialog({ task, projects, open, onOpenChange }: any) {
     try {
       const dataToSave = {
         ...formData,
-        // Если Someday — обнуляем дату в БД, иначе сохраняем как обычно
         due_at: isSomedayProject ? null : (formData.is_all_day ? formData.due_at.split('T')[0] : formData.due_at),
         recurrence: formData.recurrence === "none" ? null : formData.recurrence
       }
-      await updateTask(task.id, dataToSave)
+      
+      if (isEdit) {
+        await updateTask(task.id, dataToSave)
+      } else {
+        await createTask(dataToSave)
+      }
       onOpenChange(false)
+      router.refresh()    // КРИТИЧНО: заставляет серверные компоненты обновиться
     } catch (error) {
-      alert("Ошибка обновления")
+      alert(isEdit ? "Ошибка обновления" : "Ошибка создания")
     } finally {
       setLoading(false)
     }
@@ -71,7 +101,7 @@ export function EditTaskDialog({ task, projects, open, onOpenChange }: any) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px] max-h-[85vh] overflow-hidden flex flex-col p-0">
         <DialogHeader className="p-6 pb-2">
-          <DialogTitle>Редактировать задачу</DialogTitle>
+          <DialogTitle>{isEdit ? "Редактировать задачу" : "Новая задача"}</DialogTitle>
         </DialogHeader>
 
         <div className="overflow-y-auto px-6 flex-1 custom-scrollbar">
@@ -191,7 +221,7 @@ export function EditTaskDialog({ task, projects, open, onOpenChange }: any) {
             Нажмите <kbd className="font-sans border rounded px-1 bg-white">Ctrl</kbd> + <kbd className="font-sans border rounded px-1 bg-white">Enter</kbd>
           </p>
           <Button form="edit-task-form" type="submit" disabled={loading} className="w-full sm:w-auto shadow-sm">
-            {loading ? "Сохранение..." : "Сохранить изменения"}
+              {loading ? "Загрузка..." : isEdit ? "Сохранить изменения" : "Создать задачу"}
           </Button>
         </DialogFooter>
       </DialogContent>

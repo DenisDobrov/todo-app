@@ -6,10 +6,88 @@ import { revalidatePath } from 'next/cache'
 import { deleteFromGoogleCalendar } from '@/lib/google/calendar';
 import { updateInGoogleCalendar } from "@/lib/google/calendar";
 
-export async function toggleTaskStatus(id: string, currentStatus: boolean) {
-  const supabase = await createClient()
+import { addToGoogleCalendar } from "@/lib/google/calendar"; // Убедись, что импорт есть
+
+// actions.ts
+
+export async function createTask(data: any) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // 1. ОЧИСТКА ДАННЫХ
+  const cleanData = {
+    ...data,
+    due_at: data.due_at && data.due_at.trim() !== "" ? data.due_at : null,
+    recurrence: data.recurrence === "none" ? null : data.recurrence
+  };
+
+  let googleEventId = null;
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const providerToken = session?.provider_token;
+
+    // 2. СИНХРОНИЗАЦИЯ (теперь активна)
+    // Проверяем: есть токен, есть дата и это не проект "Когда-нибудь"
+    if (providerToken && cleanData.due_at) {
+      console.log('[CreateTask] 🚀 Отправка в Google Calendar...');
+      
+      // Используем импортированную функцию addToGoogleCalendar
+      const googleEvent = await addToGoogleCalendar(cleanData, providerToken);
+      
+      if (googleEvent?.id) {
+        googleEventId = googleEvent.id;
+        console.log('[CreateTask] ✅ Google Event ID получен:', googleEventId);
+      }
+    } else {
+      if (!providerToken) console.log('[CreateTask] ⚠️ Пропуск Google: нет токена');
+      if (!cleanData.due_at) console.log('[CreateTask] ℹ️ Пропуск Google: нет даты');
+    }
+  } catch (err) {
+    console.error('[CreateTask] 🚨 Google Sync Error:', err);
+    // Не блокируем создание в БД, если календарь ответил ошибкой
+  }
+
+  // 3. СОХРАНЕНИЕ В SUPABASE
+  const { data: newTask, error } = await supabase
+    .from('tasks')
+    .insert([{
+      ...cleanData,
+      user_id: user?.id,
+      google_event_id: googleEventId, // Теперь здесь будет реальный ID
+      completed: false
+    }])
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[CreateTask] Database Error:', error.message);
+    throw error;
+  }
+
+  revalidatePath('/dashboard');
+  return newTask;
+}
+export async function updateProjectActiveStatus(projectId: string, isActive: boolean) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('projects')
+    .update({ is_active: isActive })
+    .eq('id', projectId);
+    
+  if (error) {
+    console.error("Ошибка обновления статуса проекта:", error.message);
+    throw error;
+  }
   
-  // 1. Сначала достаем данные задачи, чтобы узнать её recurrence и параметры
+  // КРИТИЧНО: Чтобы проекты сразу поменялись местами на экране
+    revalidatePath('/dashboard');
+}
+
+export async function toggleTaskStatus(id: string, currentStatus: boolean) {
+  const supabase = await createClient();
+  
+  // 1. Сначала достаем данные задачи, чтобы узнать её параметры
   const { data: task, error: fetchError } = await supabase
     .from('tasks')
     .select('*')
@@ -29,8 +107,6 @@ export async function toggleTaskStatus(id: string, currentStatus: boolean) {
   if (updateError) throw new Error(updateError.message);
 
   // 3. МАГИЯ ПОВТОРЕНИЯ (Recurrence)
-  // Создаем копию, только если мы пометили задачу как ВЫПОЛНЕННУЮ (newStatus === true)
-  // и у неё задан цикл повторения.
   if (newStatus === true && task.recurrence) {
     const currentDate = new Date(task.due_at || new Date());
     let nextDate = new Date(currentDate);
@@ -51,18 +127,52 @@ export async function toggleTaskStatus(id: string, currentStatus: boolean) {
         break;
     }
 
-    // Вставляем новую задачу (клон старой, но с новой датой и невыполненную)
+    let nextGoogleEventId = null;
+
+    // 4. СИНХРОНИЗАЦИЯ НОВОЙ ЗАДАЧИ С GOOGLE
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const providerToken = session?.provider_token;
+
+      // Создаем событие в Google, если есть токен и у оригинала была дата
+      if (providerToken && task.due_at) {
+        console.log(`[Recurrence] Создаю повтор в Google Calendar для: "${task.title}"`);
+        
+        const nextTaskData = {
+          title: task.title,
+          description: task.description,
+          due_at: nextDate.toISOString(),
+          is_all_day: task.is_all_day,
+          priority: task.priority,
+          project_id: task.project_id
+        };
+
+        const googleEvent = await addToGoogleCalendar(nextTaskData, providerToken);
+        if (googleEvent?.id) {
+          nextGoogleEventId = googleEvent.id;
+          console.log(`[Recurrence] Новый Google Event ID получен: ${nextGoogleEventId}`);
+        }
+      }
+    } catch (err) {
+      console.error("[Recurrence] Ошибка синхронизации с Google:", err);
+      // Продолжаем работу, даже если Google подвел — задача в БД важнее
+    }
+
+    // 5. Вставляем новую задачу (клон старой с новым Google ID)
     const { error: insertError } = await supabase.from('tasks').insert([{
       user_id: task.user_id,
       title: task.title,
+      description: task.description,
       due_at: nextDate.toISOString(),
       priority: task.priority,
+      project_id: task.project_id,
       is_all_day: task.is_all_day,
       recurrence: task.recurrence,
-      completed: false // Новая задача всегда активна
+      google_event_id: nextGoogleEventId, // Привязываем новый ID
+      completed: false
     }]);
 
-    if (insertError) console.error("Ошибка создания повтора:", insertError.message);
+    if (insertError) console.error("Ошибка создания повтора в БД:", insertError.message);
   }
 
   // Обновляем страницу, чтобы увидеть изменения

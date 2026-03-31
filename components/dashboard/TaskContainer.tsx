@@ -5,11 +5,17 @@ import { TaskFilters } from './TaskFilters'
 import { TaskItem } from './task-item'
 import { isToday, isTomorrow, isAfter, startOfDay, addDays } from 'date-fns'
 
+import { Plus } from "lucide-react" // Импортируй иконку
+import { EditTaskDialog } from './EditTaskDialog'
+import { updateProjectActiveStatus } from "@/app/dashboard/actions" // Нужно создать такой экшен
+import { Button } from '../ui/button'
+
 // Описываем типы, чтобы TS был доволен
 interface Project {
   id: string;
   title: string;
   is_system?: boolean;
+  is_active?: boolean; // Добавили это поле
 }
 
 interface Task {
@@ -31,16 +37,35 @@ interface TaskContainerProps {
 
 export function TaskContainer({ initialTasks, projects }: TaskContainerProps) {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   // 1. Фильтрация по выбранному проекту
-  const filteredTasks = activeProjectId 
+
+// TaskContainer.tsx
+
+  const sortedProjects = [...projects].sort((a: any, b: any) => {
+      // Активные (is_active !== false) получают 1, неактивные 0
+      const aWeight = a.is_active === false ? 0 : 1;
+      const bWeight = b.is_active === false ? 0 : 1;
+      
+      if (aWeight !== bWeight) return bWeight - aWeight; // Сначала 1, потом 0
+      
+      // Если статус одинаковый, системные вперед
+      const aSys = a.is_system ? 1 : 0;
+      const bSys = b.is_system ? 1 : 0;
+      return bSys - aSys;
+    });
+
+    const filteredTasks = activeProjectId 
     ? initialTasks.filter(t => t.project_id === activeProjectId)
     : initialTasks;
 
+
+    
   // 2. Группировка
-  const today = filteredTasks.filter(t => t.due_at && isToday(new Date(t.due_at)));
-  const tomorrow = filteredTasks.filter(t => t.due_at && isTomorrow(new Date(t.due_at)));
-  const later = filteredTasks.filter(t => {
+    const today = filteredTasks.filter(t => t.due_at && isToday(new Date(t.due_at)));
+    const tomorrow = filteredTasks.filter(t => t.due_at && isTomorrow(new Date(t.due_at)));
+    const later = filteredTasks.filter(t => {
     if (t.completed) return false; // Убираем выполненные отсюда
     if (!t.due_at) return true;
     const date = new Date(t.due_at);
@@ -71,12 +96,27 @@ export function TaskContainer({ initialTasks, projects }: TaskContainerProps) {
 
   return (
     <div className="space-y-8">
+      <div className="flex items-center gap-2">
+      <Button 
+          variant="outline" 
+          size="icon" 
+          onClick={() => setIsCreateOpen(true)}
+          className="rounded-full shrink-0 border-dashed border-slate-300 text-slate-400 h-9 w-9"
+        >
+          <Plus size={18} />
+        </Button>
       {/* Верхние фильтры (проекты) */}
       <TaskFilters 
-        projects={projects} 
+        projects={sortedProjects} 
         onFilterChange={(id) => setActiveProjectId(id)} 
       />
-
+    </div>
+    <EditTaskDialog 
+        open={isCreateOpen} 
+        onOpenChange={setIsCreateOpen} 
+        projects={projects} 
+        // task={null} - явно не передаем задачу
+      />
       <div className="space-y-10">
         {filteredTasks.length > 0 ? (
           <>
