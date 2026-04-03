@@ -17,52 +17,52 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { RefreshCcw, Sparkles } from "lucide-react"
 import { formatToInputDateTime } from "@/lib/utils/date-utils"
-import { useRouter } from 'next/navigation' // Импортируй роутер
-
-// Добавь импорт экшена создания, если он у тебя в том же файле, что и updateTask
+import { useRouter } from 'next/navigation'
 import { updateTask, createTask } from "@/app/dashboard/actions"
+import dayjs from "dayjs"
 
 export function EditTaskDialog({ task, projects, open, onOpenChange }: any) {
-  const router = useRouter() // Инициализируй
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
 
-  // Инициализация: если task есть — редактируем, если нет — создаем новую
   const isEdit = !!task;
 
-// Инициализируем через функцию, чтобы безопасно обработать отсутствие task
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    due_at: "",
-    project_id: projects[0]?.id || "",
+    due_at: "", // Используем как временное хранилище для инпута
+    project_id: "",
     priority: "medium",
     is_all_day: false,
     recurrence: "none"
   })
 
-// Важно: сбрасывать форму, когда открываем диалог на СОЗДАНИЕ (чтобы не оставались старые данные)
-// Этот эффект "наполняет" форму при открытии
+  // 1. Показываем только активные проекты (или тот, что уже выбран в задаче)
+  const availableProjects = projects.filter((p: any) => 
+    p.is_active !== false || (isEdit && p.id === task.project_id)
+  );
+
   useEffect(() => {
     if (open) {
       if (isEdit && task) {
         setFormData({
           title: task.title || "",
           description: task.description || "",
-          due_at: task.due_at ? formatToInputDateTime(task.due_at) : "",
+          // Берем либо UTC время, либо чистую дату для заполнения инпута
+          due_at: formatToInputDateTime(task.due_datetime_utc || task.due_date || task.due_at),
           project_id: task.project_id,
           priority: task.priority || "medium",
           is_all_day: task.is_all_day || false,
           recurrence: task.recurrence || "none"
         });
       } else {
-        // Сброс для НОВОЙ задачи
         setFormData({
           title: "",
           description: "",
-          due_at: "",
-          project_id: projects[0]?.id || "",
+          due_at: dayjs().format('YYYY-MM-DD'), // По умолчанию сегодня
+          project_id: availableProjects[0]?.id || "",
           priority: "medium",
-          is_all_day: false,
+          is_all_day: true, // По умолчанию "Весь день" для новых задач
           recurrence: "none"
         });
       }
@@ -84,9 +84,10 @@ export function EditTaskDialog({ task, projects, open, onOpenChange }: any) {
     e?.preventDefault()
     setLoading(true)
     try {
+      // Подготавливаем данные: если проект "Когда-нибудь", зануляем даты
       const dataToSave = {
         ...formData,
-        due_at: isSomedayProject ? null : (formData.is_all_day ? formData.due_at.split('T')[0] : formData.due_at),
+        due_at: isSomedayProject ? null : formData.due_at,
         recurrence: formData.recurrence === "none" ? null : formData.recurrence
       }
       
@@ -96,7 +97,7 @@ export function EditTaskDialog({ task, projects, open, onOpenChange }: any) {
         await createTask(dataToSave)
       }
       onOpenChange(false)
-      router.refresh()    // КРИТИЧНО: заставляет серверные компоненты обновиться
+      router.refresh()
     } catch (error) {
       alert(isEdit ? "Ошибка обновления" : "Ошибка создания")
     } finally {
@@ -110,16 +111,13 @@ export function EditTaskDialog({ task, projects, open, onOpenChange }: any) {
         <DialogHeader className="p-6 pb-2">
           <DialogTitle>{isEdit ? "Редактировать задачу" : "Новая задача"}</DialogTitle>
           <DialogDescription className="sr-only">
-            {isEdit
-              ? "Форма редактирования задачи"
-              : "Форма создания новой задачи"}
+            {isEdit ? "Форма редактирования задачи" : "Форма создания новой задачи"}
           </DialogDescription>
         </DialogHeader>
 
         <div className="overflow-y-auto px-6 flex-1 custom-scrollbar">
           <form id="edit-task-form" onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="space-y-4 py-4">
             
-            {/* Название */}
             <div className="space-y-2">
               <Label>Название</Label>
               <Input 
@@ -129,23 +127,23 @@ export function EditTaskDialog({ task, projects, open, onOpenChange }: any) {
               />
             </div>
 
-            {/* Проект */}
             <div className="space-y-2">
               <Label>Проект</Label>
               <Select 
                 value={formData.project_id} 
                 onValueChange={(v) => setFormData({...formData, project_id: v})}
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Выберите проект" /></SelectTrigger>
                 <SelectContent>
-                  {projects.map((p: any) => (
-                    <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                  {availableProjects.map((p: any) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.is_system ? "📥 " : "🚀 "}{p.title}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Блок даты и повтора: скрываем, если это Someday */}
             {!isSomedayProject ? (
               <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="grid grid-cols-2 gap-4">
@@ -153,9 +151,20 @@ export function EditTaskDialog({ task, projects, open, onOpenChange }: any) {
                     <Checkbox 
                       id="is_all_day" 
                       checked={formData.is_all_day}
-                      onCheckedChange={(checked) => setFormData({ ...formData, is_all_day: !!checked })}
+                      onCheckedChange={(checked) => {
+                        // При переключении на All Day отрезаем время от текущей строки
+                        const newDueAt = checked 
+                          ? formData.due_at.split('T')[0] 
+                          : (formData.due_at.includes('T') ? formData.due_at : `${formData.due_at}T12:00`);
+                        
+                        setFormData({ 
+                          ...formData, 
+                          is_all_day: !!checked,
+                          due_at: newDueAt
+                        });
+                      }}
                     />
-                    <Label htmlFor="is_all_day" className="text-sm cursor-pointer">Весь день</Label>
+                    <Label htmlFor="is_all_day" className="text-sm cursor-pointer font-medium">Весь день</Label>
                   </div>
 
                   <div className="space-y-2">
@@ -179,7 +188,8 @@ export function EditTaskDialog({ task, projects, open, onOpenChange }: any) {
                     <Label>{formData.is_all_day ? "Дата" : "Дедлайн"}</Label>
                     <Input 
                       type={formData.is_all_day ? "date" : "datetime-local"} 
-                      value={formData.is_all_day ? formData.due_at.split('T')[0] : formData.due_at}
+                      // Гарантируем правильный формат для HTML-инпутов
+                      value={formData.due_at || ""}
                       onChange={(e) => setFormData({...formData, due_at: e.target.value})}
                     />
                   </div>
@@ -213,18 +223,15 @@ export function EditTaskDialog({ task, projects, open, onOpenChange }: any) {
               </div>
             )}
 
-            {/* Описание */}
             <div className="space-y-2">
               <Label>Описание</Label>
               <Textarea 
                 placeholder="Добавьте детали..."
-                className="min-h-[120px] max-h-[300px] overflow-y-auto leading-relaxed"
+                className="min-h-[100px] max-h-[250px] overflow-y-auto leading-relaxed"
                 value={formData.description}
                 onChange={(e) => setFormData({...formData, description: e.target.value})}
               />
             </div>
-            
-            <div className="h-4" />
           </form>
         </div>
 

@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { SupabaseClient, User } from '@supabase/supabase-js';
 
 import { addToGoogleCalendar } from '@/lib/google/calendar'; // Проверь правильность пути к файлу
+import { prepareTaskStorage } from '@/lib/utils/date-utils'; // Наш новый хелпер
+import dayjs from 'dayjs';
 
 export interface SkillConfig<T extends z.ZodRawShape> {
   description: string;
@@ -10,119 +12,116 @@ export interface SkillConfig<T extends z.ZodRawShape> {
 }
 
 export const SKILL_REGISTRY: Record<string, SkillConfig<any>> = {
-  // ПРИЛОЖЕНИЕ: ЗАДАЧИ
 create_task: {
-  description: "Создание задачи. Если время не указано, ставь is_all_day: true. Для повторов используй recurrence.",
-  schema: z.object({
-    title: z.string(),
-    due_at: z.string().optional().nullable(),
-    priority: z.enum(['low', 'medium', 'high']).catch('medium').default('medium'),
-    is_all_day: z.boolean().default(false),
-    project_id: z.string().nullable().optional().catch(null), // Теперь строго UUID проекта
-    recurrence: z.preprocess(
-      (val) => (val === "" || val === "none" || val === "null" ? null : val),
-      z.enum(['daily', 'weekly', 'monthly', 'yearly']).nullable().optional()
-    ).catch(null)
-  }),
-  handler: async (supabase, user, params: any) => {
-    
-    let finalProjectId = params.project_id;
+    description: "Создание задачи. Если время не указано, ставь is_all_day: true. Для повторов используй recurrence.",
+    schema: z.object({
+      title: z.string(),
+      due_at: z.string().optional().nullable(),
+      priority: z.enum(['low', 'medium', 'high']).catch('medium').default('medium'),
+      is_all_day: z.boolean().default(false),
+      project_id: z.string().nullable().optional().catch(null),
+      recurrence: z.preprocess(
+        (val) => (val === "" || val === "none" || val === "null" ? null : val),
+        z.enum(['daily', 'weekly', 'monthly', 'yearly']).nullable().optional()
+      ).catch(null)
+    }),
+    handler: async (supabase, user, params: any) => {
+      // ФИКС ТИПИЗАЦИИ: Гарантируем строку для хелпера
+      const dateInput = params.due_at || "";
+      const { due_date, due_datetime_utc } = prepareTaskStorage(dateInput, params.is_all_day);
 
-    // 1. Подготовка даты
-    // 1. Подготовка даты (теперь может быть строкой или null)
-    let finalDueAt: string | null = null;
+      console.log('-----------------------------------');
+      console.log(`🆕 AI СОЗДАНИЕ ЗАДАЧИ: "${params?.title}"`);
+      // Используем dayjs для красивого лога из новой архитектуры
+      const logDate = due_datetime_utc ? dayjs(due_datetime_utc).format('DD.MM.YYYY HH:mm') : due_date;
+      console.log(`📅 Дата: ${logDate || 'БЕЗ ДАТЫ (Someday)'}`);
+      console.log(`🔥 Приоритет: ${String(params?.priority ?? 'medium').toUpperCase()}`);
+      console.log(`📂 ID Проекта: ${params.project_id || '❌ НЕ ВЫБРАН'}`);
+      console.log('-----------------------------------');
 
-    if (params.due_at && typeof params.due_at === 'string' && params.due_at.trim() !== "") {
-      const taskDate = new Date(params.due_at);
-      
-      if (!isNaN(taskDate.getTime())) {
-        if (params.is_all_day) {
-          taskDate.setHours(0, 0, 0, 0);
+      const { data: newTask, error: dbError } = await supabase
+        .from('tasks')
+        .insert([{
+          user_id: user.id,
+          project_id: params.project_id || null,
+          title: params.title,
+          due_at: due_datetime_utc || due_date, // Совместимость
+          due_date: due_date,                   // Новая архитектура
+          due_datetime_utc: due_datetime_utc,   // Новая архитектура
+          priority: params.priority,
+          is_all_day: !!params.is_all_day,
+          recurrence: params.recurrence || null,
+          completed: false
+        }])
+        .select()
+        .single();
+
+      if (dbError) return { data: null, error: dbError };
+
+      console.log('--- 🛡️ ИНТЕГРАЦИЯ С КАЛЕНДАРЕМ ---');
+      const { data: { session } } = await supabase.auth.getSession();
+      const providerToken = session?.provider_token; 
+
+      if (providerToken && newTask) {
+        console.log(`🚀 Отправка в Google Calendar...`);
+        const calendarResult = await addToGoogleCalendar(newTask, providerToken);
+        
+        if (calendarResult.id) {
+          console.log(`📅 Google Event ID получен: ${calendarResult.id}`);
+          await supabase
+            .from('tasks')
+            .update({ google_event_id: calendarResult.id })
+            .eq('id', newTask.id);
         }
-        finalDueAt = taskDate.toISOString();
+      } else {
+        console.log(`⚠️ Токен не найден или задача пуста.`);
       }
+
+      return { data: newTask, error: null };
     }
+  },
 
-    
-
-    // 2. Логирование
-    const displayPriority = String(params?.priority ?? 'medium').toUpperCase();
-    // const displayRecurrence = params?.recurrence ? String(params.recurrence).toUpperCase() : 'НЕТ';
-
-    // 2. Логирование (используем finalDueAt для лога)
-    console.log('-----------------------------------');
-    console.log(`🆕 СОЗДАНИЕ ЗАДАЧИ: "${params?.title}"`);
-    console.log(`📅 Дата: ${finalDueAt ? new Date(finalDueAt).toLocaleString('ru-RU') : 'БЕЗ ДАТЫ (Someday)'}`);
-    console.log(`🔥 Приоритет: ${String(params?.priority ?? 'medium').toUpperCase()}`);
-    console.log(`📂 ID Проекта: ${params.project_id || '❌ НЕ ВЫБРАН'}`);
-    console.log('-----------------------------------');
-
-    // 3. СНАЧАЛА ЗАПИСЫВАЕМ В БАЗУ
-    const { data: newTask, error: dbError } = await supabase
-      .from('tasks')
-      .insert([{
-        user_id: user.id,
-        project_id: params.project_id || null,
-        title: params.title,
-        due_at: finalDueAt, // <--- Теперь тут может быть честный null
-        priority: params.priority,
-        is_all_day: !!params.is_all_day,
-        recurrence: params.recurrence || null,
-        completed: false
-      }])
-      .select()
-      .single();
-
-    if (dbError) return { data: null, error: dbError };
-
-    // 4. ТЕПЕРЬ ИНТЕГРАЦИЯ (когда задача уже создана и ошибок нет)
-    console.log('--- 🛡️ ИНТЕГРАЦИЯ С КАЛЕНДАРЕМ ---');
-    
-    // Пытаемся достать токен из сессии
-    const { data: { session } } = await supabase.auth.getSession();
-    const providerToken = session?.provider_token; 
-
-// Внутри create_task handler в lib/ai/registry.ts
-
-// ... после создания записи в базе (newTask)
-if (providerToken && newTask) {
-  console.log(`🚀 Отправка в Google Calendar...`);
-  const calendarResult = await addToGoogleCalendar(newTask, providerToken);
-  
-  if (calendarResult.id) {
-    console.log(`📅 Google Event ID получен: ${calendarResult.id}`);
-    
-    // ОБНОВЛЯЕМ задачу в базе, добавляя ID календаря
-    await supabase
-      .from('tasks')
-      .update({ google_event_id: calendarResult.id })
-      .eq('id', newTask.id);
-  }
-  }  else {
-      console.log(`⚠️ Токен не найден. Нужно перезайти с правами (scopes) Календаря.`);
+  reschedule_task: {
+    description: "Перенос задачи на другое время/дату. Поля: title (название), new_date (ISO дата/время).",
+    schema: z.object({
+      title: z.string(),
+      new_date: z.string(),
+      is_all_day: z.boolean().default(false)
+    }),
+    handler: async (supabase, user, params: any) => {
+      // ФИКС ТИПИЗАЦИИ: params.new_date гарантированно строка из Zod
+      const { due_date, due_datetime_utc } = prepareTaskStorage(params.new_date, params.is_all_day);
+      
+      console.log(`📅 AI ПЕРЕНОС: "${params.title}" -> ${due_date}`);
+      
+      return await supabase
+        .from('tasks')
+        .update({ 
+          due_at: due_datetime_utc || due_date,
+          due_date: due_date,
+          due_datetime_utc: due_datetime_utc 
+        })
+        .eq('user_id', user.id)
+        .ilike('title', `%${params.title}%`);
     }
+  },
 
-    return { data: newTask, error: null };
-  }
-},
-  // Выполнение задачи 
   complete_task: {
     description: "Отметить задачу или список задач как выполненные. Параметры: title (опционально), all_today (boolean).",
     schema: z.object({
       title: z.string().optional(),
       all_today: z.boolean().optional().default(false)
     }),
-    handler: async (supabase, user, params) => {
+    handler: async (supabase, user, params: any) => {
       let query = supabase
         .from('tasks')
         .update({ completed: true })
         .eq('user_id', user.id);
 
       if (params.all_today) {
-        const today = new Date().toISOString().split('T')[0];
-        query = query.gte('due_at', `${today}T00:00:00`).lte('due_at', `${today}T23:59:59`);
+        const today = dayjs().format('YYYY-MM-DD');
+        query = query.eq('due_date', today); // Используем новое поле due_date для точности
       } else if (params.title) {
-        // Поиск по частичному совпадению названия (регистронезависимо)
         query = query.ilike('title', `%${params.title}%`);
       } else {
         return { error: 'Не указана задача для завершения' };
@@ -153,22 +152,7 @@ if (providerToken && newTask) {
     }
   },
 
-  // 2. ПЕРЕНОС (Reschedule)
-  reschedule_task: {
-    description: "Перенос задачи на другое время/дату. Поля: title (название), new_date (ISO дата/время).",
-    schema: z.object({
-      title: z.string(),
-      new_date: z.string()
-    }),
-    handler: async (supabase, user, params) => {
-      console.log(`📅 Перенос задачи "${params.title}" на ${params.new_date}`);
-      return await supabase
-        .from('tasks')
-        .update({ due_at: params.new_date })
-        .eq('user_id', user.id)
-        .ilike('title', `%${params.title}%`);
-    }
-  },
+
 // Создание проекта поьзователя 
 
   create_project: {
@@ -227,7 +211,7 @@ if (providerToken && newTask) {
         schema: z.object({
           query: z.string().describe("Конкретный вопрос по содержанию курсов")
         }),
-handler: async (supabase, user, params) => {
+      handler: async (supabase, user, params) => {
       const embeddingRes = await fetch('https://api.openai.com/v1/embeddings', {
         method: 'POST',
         headers: {

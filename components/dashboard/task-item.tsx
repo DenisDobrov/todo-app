@@ -17,11 +17,10 @@ const priorityColors = {
 export function TaskItem({ task, projects }: { task: any, projects: any[] }) {
   const [isEditOpen, setIsEditOpen] = useState(false);
   
-  // Безопасно находим данные проекта
-  // Сначала смотрим в task.projects (join из БД), если нет - ищем в массиве projects по id
   const projectData = task.projects || projects.find(p => p.id === task.project_id);
   
-  const overdue = isOverdue(task.due_at, task.completed);
+  // Используем новое поле UTC для проверки просроченности, если оно есть
+  const overdue = isOverdue(task.due_datetime_utc || task.due_date, task.completed);
   
   const x = useMotionValue(0);
   const opacityCheck = useTransform(x, [20, 80], [0, 1]);
@@ -40,7 +39,6 @@ export function TaskItem({ task, projects }: { task: any, projects: any[] }) {
   return (
     <>
       <div className="relative overflow-hidden rounded-xl bg-slate-100 group">
-        {/* Подложка "Выполнено" */}
         <motion.div 
           style={{ opacity: opacityCheck }}
           className="absolute inset-y-0 left-0 w-full bg-green-500 flex items-center justify-start px-6 text-white"
@@ -48,7 +46,6 @@ export function TaskItem({ task, projects }: { task: any, projects: any[] }) {
           <Check className="w-5 h-5" />
         </motion.div>
 
-        {/* Подложка "Удалить" */}
         <motion.div 
           style={{ opacity: opacityTrash }}
           className="absolute inset-y-0 right-0 w-full bg-red-500 flex items-center justify-end px-6 text-white"
@@ -66,13 +63,11 @@ export function TaskItem({ task, projects }: { task: any, projects: any[] }) {
             if (info.offset.x < -80) handleSwipeDelete();
           }}
           onTap={() => {
-            // Открываем только если не было значительного сдвига (защита от случайных открытий при свайпе)
             if (Math.abs(x.get()) < 5) setIsEditOpen(true);
           }}
           className="relative flex items-center justify-between p-4 border rounded-xl bg-white shadow-sm hover:shadow-md transition-all cursor-pointer select-none active:scale-[0.98]"
         >
           <div className="flex items-center gap-4 overflow-hidden">
-            {/* Индикатор статуса */}
             <div className={`w-2.5 h-2.5 rounded-full shrink-0 transition-colors duration-300 ${
               task.completed ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'bg-slate-300'
             }`} />
@@ -85,17 +80,16 @@ export function TaskItem({ task, projects }: { task: any, projects: any[] }) {
               </p>
               
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
-                {/* Дата */}
-                {task.due_at && (
+                {/* Дата: Приоритет полю UTC для корректного времени */}
+                {(task.due_date || task.due_datetime_utc) && (
                   <span className={`text-[11px] flex items-center gap-1 ${
                     overdue ? "text-red-500 font-bold animate-pulse" : "text-slate-400 font-medium"
                   }`}>
-                    {formatTaskDate(task.due_at, task.is_all_day)}
+                    {formatTaskDate(task.due_datetime_utc || task.due_date, task.is_all_day)}
                     {overdue && " (просрочено)"}
                   </span>
                 )}
 
-                {/* Проект */}
                 <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
                   <span className="opacity-30">•</span> 
                   {projectData ? (
@@ -108,7 +102,6 @@ export function TaskItem({ task, projects }: { task: any, projects: any[] }) {
                   )}
                 </span>
 
-                {/* Повтор */}
                 {task.recurrence && (
                   <span className="text-[10px] text-blue-500/80 font-bold uppercase tracking-tight flex items-center gap-0.5 bg-blue-50 px-1 rounded">
                     <RefreshCcw className="w-2.5 h-2.5" /> {task.recurrence}

@@ -6,9 +6,8 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { SKILL_REGISTRY } from '@/lib/ai/registry'
-
-// Используем твою общую утилиту для работы с таймзонами
 import { getUserTimeZone } from '@/lib/utils/date-utils'
+import dayjs from 'dayjs'
 
 // Вспомогательная функция для динамической сборки документации скиллов
 const getIntentContext = (intent: string) => {
@@ -59,7 +58,8 @@ export async function processVoiceTask(formData: FormData) {
     const { object: route } = await generateObject({
       model: openai('gpt-4o-mini'),
       schema: z.object({ intent: z.enum(['learning', 'tasks', 'general', 'ui_command']) }),
-      prompt: `Текст: "${transcript}". Категории: tasks (задачи), learning (курсы/обучение), ui_command (интерфейс/фильтры), general (болтовня).`
+     // prompt: `Текст: "${transcript}". Категории: tasks (задачи), learning (курсы/обучение), ui_command (интерфейс/фильтры), general (болтовня).`
+     prompt: `Текст: "${transcript}".`
     });
     console.log("🚦 Роутер выбрал:", route.intent);
 
@@ -78,7 +78,8 @@ export async function processVoiceTask(formData: FormData) {
 
     // Используем динамическую таймзону вместо хардкода Santiago
     const currentTimezone = getUserTimeZone();
-    const now = new Date().toLocaleString('ru-RU', { timeZone: currentTimezone });
+    // Даем GPT четкое понимание текущего момента в Боготе
+    const nowContext = dayjs().format('dddd, D MMMM YYYY, HH:mm');
 
     console.log("📦 Контекст проектов для GPT:", projectsContext);
     // 4. Executor (Формирование параметров)
@@ -91,8 +92,8 @@ export async function processVoiceTask(formData: FormData) {
       }),
       prompt: `
         Текст пользователя: "${transcript}"
+        Контекст времени: ${nowContext} (Зона: ${currentTimezone})
         Категория: ${route.intent}
-        Сегодняшняя дата и время: ${now} (Часовая зона: ${currentTimezone})
 
         ДОСТУПНЫЕ ФУНКЦИИ:
         ${skillsDocs}
@@ -100,45 +101,33 @@ export async function processVoiceTask(formData: FormData) {
         СПИСОК ЛИЧНЫХ ПРОЕКТОВ ПОЛЬЗОВАТЕЛЯ:
         ${projectsContext}
 
-       ПРАВИЛА ОБРАБОТКИ ПРОЕКТОВ:
-        1. Если пользователь говорит "отложи на когда-нибудь", "в долгий ящик", "напомни когда-нибудь" — ВСЕГДА выбирай ID проекта "Когда-нибудь".
-        2. Если выбран проект "Когда-нибудь", параметр "due_at" ОБЯЗАТЕЛЬНО должен быть null, а "is_all_day" — false. Игнорируй любые даты в тексте для этого проекта.
-        3. Если пользователь хочет "во входящие/инбокс" — выбери ID проекта "Входящие".
-        4. Если проект не упомянут — используй ID проекта "Входящие" по умолчанию.
+        ИНСТРУКЦИИ ДЛЯ СОЗДАНИЯ ЗАДАЧ (create_task):
+        - Если время не указано ("завтра"), ставь is_all_day: true.
+        - Если время указано ("в 18:00"), ставь is_all_day: false и прибавь время к дате.
+        - project_id: Используй ID из списка. Если нет совпадений — используй ID проекта "Входящие".
+        - Если "Когда-нибудь" — due_at: null.
 
-        ПРАВИЛА ПАРАМЕТРОВ:
-        - priority: "low", "medium", "high". По дефолту "medium".
-        - Время: если указано время ("в 10:00"), ставь is_all_day: false. Если только дата — is_all_day: true.
-        - Recurrence: daily, weekly, monthly, yearly или null.
-        - Ответ: кратко и дружелюбно, как SOLUTER AI.
+        Верни параметры в JSON формате.
       `
     });
 
     console.log("🎯 GPT выбрал:", decision.skill_name);
 
     // 5. Исполнение
+// 5. Исполнение скилла
     const activeSkill = SKILL_REGISTRY[decision.skill_name];
-    if (!activeSkill) {
-      return { success: true, transcript, response_phrase: decision.response_phrase };
-    }
-      // ПАРСИНГ СТРОКИ В ОБЪЕКТ
-      let rawParams = {};
-      try {
-        rawParams = JSON.parse(decision.parameters_json);
-      } catch (e) {
-        console.error("❌ GPT прислал кривой JSON:", decision.parameters_json);
-        return { success: false, response_phrase: "Ошибка формата данных." };
-      }
+    if (!activeSkill) return { success: true, response_phrase: decision.response_phrase };
 
-      // Валидация уже готового объекта
-      const validation = activeSkill.schema.safeParse(rawParams);
+    const rawParams = JSON.parse(decision.parameters_json);
+    const validation = activeSkill.schema.safeParse(rawParams);
 
     if (!validation.success) {
-      console.error("❌ Ошибка валидации параметров:", validation.error.format());
-      return { success: true, transcript, response_phrase: "Я не смог правильно распознать детали задачи." };
+      console.error("❌ Validation Error:", validation.error);
+      return { success: false, response_phrase: "Ошибка параметров." };
     }
 
     console.log("🚀 Запуск хендлера...");
+
     const result = await activeSkill.handler(supabase, user, validation.data);
 
     // Логика RAG для обучения
