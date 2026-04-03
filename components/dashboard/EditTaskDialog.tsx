@@ -1,7 +1,14 @@
 'use client'
 
 import { useEffect, useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -102,6 +109,11 @@ export function EditTaskDialog({ task, projects, open, onOpenChange }: any) {
       <DialogContent className="sm:max-w-[425px] max-h-[85vh] overflow-hidden flex flex-col p-0">
         <DialogHeader className="p-6 pb-2">
           <DialogTitle>{isEdit ? "Редактировать задачу" : "Новая задача"}</DialogTitle>
+          <DialogDescription className="sr-only">
+            {isEdit
+              ? "Форма редактирования задачи"
+              : "Форма создания новой задачи"}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="overflow-y-auto px-6 flex-1 custom-scrollbar">
