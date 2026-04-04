@@ -67,74 +67,22 @@ export async function createTask(data: any) {
  */
 export async function toggleTaskStatus(id: string, currentStatus: boolean) {
   const supabase = await createClient();
-  
-  const { data: task, error: fetchError } = await supabase
-    .from('tasks')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (fetchError || !task) throw new Error("Task not found");
-
   const newStatus = !currentStatus;
 
+  // Просто обновляем статус. 
+  // Если у задачи есть recurrence, триггер в Postgres сам создаст копию.
   const { error: updateError } = await supabase
     .from('tasks')
     .update({ completed: newStatus })
     .eq('id', id);
 
-  if (updateError) throw new Error(updateError.message);
-
-  // ЛОГИКА ПОВТОРЕНИЯ
-  if (newStatus === true && task.recurrence) {
-    // Вычисляем следующую дату через dayjs (локально)
-    const unit = task.recurrence === 'daily' ? 'day' : 
-                 task.recurrence === 'weekly' ? 'week' : 
-                 task.recurrence === 'monthly' ? 'month' : 'year';
-    
-    const nextDateRaw = dayjs(task.due_at).add(1, unit as any);
-    const { due_date, due_datetime_utc } = prepareTaskStorage(
-      nextDateRaw.format(task.is_all_day ? 'YYYY-MM-DD' : 'YYYY-MM-DDTHH:mm'), 
-      task.is_all_day
-    );
-
-    let nextGoogleEventId = null;
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const providerToken = session?.provider_token;
-
-      if (providerToken && task.due_at) {
-        const nextTaskData = {
-          ...task,
-          due_at: nextDateRaw.toISOString(),
-        };
-        const googleEvent = await addToGoogleCalendar(nextTaskData, providerToken);
-        nextGoogleEventId = googleEvent?.id;
-      }
-    } catch (err) {
-      console.error("[Recurrence] Google Error:", err);
-    }
-
-    await supabase.from('tasks').insert([{
-      user_id: task.user_id,
-      title: task.title,
-      description: task.description,
-      due_at: nextDateRaw.toISOString(),
-      due_date,
-      due_datetime_utc,
-      priority: task.priority,
-      project_id: task.project_id,
-      is_all_day: task.is_all_day,
-      recurrence: task.recurrence,
-      google_event_id: nextGoogleEventId,
-      completed: false
-    }]);
+  if (updateError) {
+    console.error("Ошибка при смене статуса:", updateError.message);
+    throw new Error(updateError.message);
   }
 
   revalidatePath('/dashboard');
 }
-
 /**
  * ОБНОВЛЕНИЕ ЗАДАЧИ
  */

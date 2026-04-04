@@ -105,32 +105,41 @@ create_task: {
         .ilike('title', `%${params.title}%`);
     }
   },
+// libs/ai/registry.ts
 
   complete_task: {
-    description: "Отметить задачу или список задач как выполненные. Параметры: title (опционально), all_today (boolean).",
-    schema: z.object({
-      title: z.string().optional(),
-      all_today: z.boolean().optional().default(false)
-    }),
-    handler: async (supabase, user, params: any) => {
-      let query = supabase
-        .from('tasks')
-        .update({ completed: true })
-        .eq('user_id', user.id);
+  description: "Отметить задачу или задачи на сегодня как выполненные. Повторы создаются автоматически в БД.",
+  schema: z.object({
+    title: z.string().optional(),
+    all_today: z.boolean().optional().default(false)
+  }),
+  handler: async (supabase, user, params: any) => {
+    let query = supabase
+      .from('tasks')
+      .update({ completed: true })
+      .eq('user_id', user.id)
+      .eq('completed', false);
 
-      if (params.all_today) {
-        const today = dayjs().format('YYYY-MM-DD');
-        query = query.eq('due_date', today); // Используем новое поле due_date для точности
-      } else if (params.title) {
-        query = query.ilike('title', `%${params.title}%`);
-      } else {
-        return { error: 'Не указана задача для завершения' };
-      }
-
-      const { data, error } = await query;
-      return { data, error };
+    if (params.all_today) {
+      const todayStr = dayjs().format('YYYY-MM-DD');
+      console.log(`[AI Skill] Завершаю всё на сегодня: ${todayStr}`);
+      query = query.eq('due_date', todayStr);
+    } else if (params.title) {
+      console.log(`[AI Skill] Завершаю: "${params.title}"`);
+      query = query.ilike('title', `%${params.title}%`);
+    } else {
+      return { error: 'Не указана цель для завершения' };
     }
-  },
+
+    const { data, error } = await query;
+    
+    if (!error) {
+      console.log("✅ Статус обновлен. БД создала следующую итерацию с сохранением Google ID.");
+    }
+
+    return { data, error };
+  }
+},
   // 1. УДАЛЕНИЕ (Чтобы не копить мусор)
   delete_tasks: {
     description: "Удаление задач по названию или всех выполненных. Поля: title (название), only_completed (boolean).",
