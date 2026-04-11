@@ -9,7 +9,7 @@ const questions = [
   },
   {
     q: "Is this suitable for career changers?",
-    a: "Yes. SOLUTER AI was designed specifically for professionals transitioning into AI.",
+    a: "Yes. DOBROW Academy was designed specifically for professionals transitioning into AI.",
   },
   {
     q: "What makes this different from online courses?",

@@ -128,8 +128,8 @@ export function SoluterWordmark({ className, size = "md", color = "dark" }: Logo
       )}
       style={{ color: primary }}
     >
-      SOLUTER
-      <span className="font-light ml-1 opacity-70">AI</span>
+      DOBROW
+      <span className="font-light ml-1 opacity-70">Academy</span>
     </span>
   )
 }

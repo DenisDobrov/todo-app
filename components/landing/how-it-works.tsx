@@ -24,7 +24,7 @@ export function HowItWorks() {
     <section id="roadmaps" className="px-6 py-20 lg:px-8">
       <div className="mx-auto max-w-6xl">
         <h2 className="text-center text-3xl font-semibold tracking-tight">
-          How SOLUTER AI works
+          How DOBROW Academy works
         </h2>
 
         <div className="mt-12 grid gap-6 md:grid-cols-4">

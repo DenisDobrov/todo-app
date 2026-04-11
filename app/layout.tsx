@@ -3,9 +3,9 @@ import "./globals.css"
 import { Toaster } from "@/components/ui/sonner"
 
 export const metadata: Metadata = {
-  title: "SOLUTER AI",
+  title: "DOBROW Academy",
   description:
-    "SOLUTER AI helps professionals transition into AI careers through structured roadmaps, practical projects, and guided learning.",
+    "DOBROW Academy helps professionals transition into AI careers through structured roadmaps, practical projects, and guided learning.",
   keywords: [
     "AI careers",
     "AI education",
@@ -13,6 +13,7 @@ export const metadata: Metadata = {
     "machine learning learning path",
     "AI roadmap",
     "edtech",
+    "DOBROW Academy",
     "SOLUTER AI",
   ],
 }

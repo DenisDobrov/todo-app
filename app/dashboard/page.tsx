@@ -40,7 +40,7 @@ export default async function DashboardPage() {
       {/* Top Navigation */}
       <nav className="h-16 border-b bg-white flex items-center px-8 justify-between sticky top-0 z-40">
         <span className="font-bold text-xl tracking-tight text-gray-900">
-          SOLUTER <span className="text-blue-600">AI</span>
+          DOBROW <span className="text-blue-600">Academy</span>
         </span>
         <div className="flex items-center gap-4">
           <form action={logout}>

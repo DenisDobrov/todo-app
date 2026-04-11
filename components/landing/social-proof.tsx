@@ -19,7 +19,7 @@ export function SocialProof() {
 
         <p className="mt-8 text-sm text-muted-foreground">
           More than <span className="font-semibold text-foreground">2,500 learners</span>{" "}
-          are building AI skills with SOLUTER AI
+          are building AI skills with DOBROW Academy
         </p>
       </div>
     </section>

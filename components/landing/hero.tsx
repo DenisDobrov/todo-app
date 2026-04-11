@@ -21,7 +21,7 @@ export function Hero() {
             </h1>
 
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
-              SOLUTER AI helps professionals move into AI roles through guided
+              DOBROW Academy helps professionals move into AI roles through guided
               roadmaps, practical projects, and a progress dashboard that turns
               career change into a clear step-by-step system.
             </p>

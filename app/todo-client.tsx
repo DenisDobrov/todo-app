@@ -33,7 +33,7 @@ export default function TodoClient({ user, initialTasks, learningData, totalProg
       <header className="bg-white/80 backdrop-blur-md border-b border-slate-100 sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-6 h-16 flex justify-between items-center">
           <div className="flex flex-col">
-            <span className="font-black text-slate-900 leading-none tracking-tighter text-xl">SOLUTER AI</span>
+            <span className="font-black text-slate-900 leading-none tracking-tighter text-xl">DOBROW Academy</span>
             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Career Transition Platform</span>
           </div>
           <div className="flex items-center gap-4">
@@ -50,7 +50,7 @@ export default function TodoClient({ user, initialTasks, learningData, totalProg
 
       <main className="max-w-5xl mx-auto px-6 py-10 space-y-10">
         
-        {/* PROGRESS CARD (Дизайн SOLUTER AI) */}
+        {/* PROGRESS CARD (Дизайн DOBROW Academy) */}
         <section className="bg-white rounded-[2.5rem] p-10 shadow-sm border border-slate-100 relative overflow-hidden group">
           <div className="absolute -top-12 -right-12 w-40 h-40 bg-blue-50 rounded-full blur-3xl opacity-50 group-hover:opacity-100 transition-opacity" />
           

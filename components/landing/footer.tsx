@@ -38,7 +38,7 @@ export function Footer() {
               </div>
               <div className="flex flex-col leading-none">
                 <span className="text-sm font-semibold tracking-tight text-foreground">
-                  SOLUTER AI
+                  DOBROW Academy
                 </span>
                 <span className="text-xs text-muted-foreground">
                   AI career transitions
@@ -84,7 +84,7 @@ export function Footer() {
         </div>
 
         <div className="mt-12 flex flex-col gap-3 border-t pt-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p>© 2026 SOLUTER AI. All rights reserved.</p>
+          <p>© 2026 DOBROW Academy. All rights reserved.</p>
           <p>Built for people moving into AI professions.</p>
         </div>
       </div>

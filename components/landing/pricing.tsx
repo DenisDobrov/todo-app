@@ -15,7 +15,7 @@ export function Pricing() {
 
         <Card className="mt-12">
           <CardHeader>
-            <CardTitle className="text-2xl">SOLUTER AI</CardTitle>
+            <CardTitle className="text-2xl">DOBROW Academy</CardTitle>
           </CardHeader>
 
           <CardContent className="space-y-6">

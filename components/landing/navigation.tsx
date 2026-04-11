@@ -21,7 +21,7 @@ function SoluterLogo() {
       </div>
       <div className="flex flex-col leading-none">
         <span className="text-sm font-semibold tracking-tight text-foreground">
-          SOLUTER AI
+          DOBROW Academy
         </span>
         <span className="text-xs text-muted-foreground">
           AI career transitions

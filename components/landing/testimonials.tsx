@@ -4,7 +4,7 @@ const testimonials = [
   {
     name: "Alex M.",
     role: "Data Analyst → ML Engineer",
-    text: "SOLUTER AI gave me a clear path into machine learning. I stopped jumping between tutorials and started building real projects.",
+    text: "DOBOROW Academy gave me a clear path into machine learning. I stopped jumping between tutorials and started building real projects.",
   },
   {
     name: "Maria S.",
